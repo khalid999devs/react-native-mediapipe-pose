@@ -1,7 +1,13 @@
 import type { StyleProp, ViewStyle } from 'react-native';
 
-export type OnLoadEventPayload = {
-  url: string;
+export type CameraType = 'front' | 'back';
+
+export type OnCameraReadyEventPayload = {
+  ready: boolean;
+};
+
+export type OnErrorEventPayload = {
+  error: string;
 };
 
 export type ReactNativeMediapipePoseModuleEvents = {
@@ -13,7 +19,8 @@ export type ChangeEventPayload = {
 };
 
 export type ReactNativeMediapipePoseViewProps = {
-  url: string;
-  onLoad: (event: { nativeEvent: OnLoadEventPayload }) => void;
   style?: StyleProp<ViewStyle>;
+  cameraType?: CameraType;
+  onCameraReady?: (event: { nativeEvent: OnCameraReadyEventPayload }) => void;
+  onError?: (event: { nativeEvent: OnErrorEventPayload }) => void;
 };

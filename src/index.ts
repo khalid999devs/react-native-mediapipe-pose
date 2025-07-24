@@ -2,4 +2,4 @@
 // and on native platforms to ReactNativeMediapipePoseModule.ts
 export { default } from './ReactNativeMediapipePoseModule';
 export { default as ReactNativeMediapipePoseView } from './ReactNativeMediapipePoseView';
-export * from  './ReactNativeMediapipePose.types';
+export * from './ReactNativeMediapipePose.types';

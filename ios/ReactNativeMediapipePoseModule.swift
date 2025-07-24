@@ -1,4 +1,5 @@
 import ExpoModulesCore
+import AVFoundation
 
 public class ReactNativeMediapipePoseModule: Module {
   // Each module class must implement the definition function. The definition consists of components
@@ -18,31 +19,45 @@ public class ReactNativeMediapipePoseModule: Module {
     // Defines event names that the module can send to JavaScript.
     Events("onChange")
 
-    // Defines a JavaScript synchronous function that runs the native code on the JavaScript thread.
-    Function("hello") {
-      return "Hello world! 👋"
+    // Function to switch camera type
+    AsyncFunction("switchCamera") { (viewTag: Int) in
+      DispatchQueue.main.async {
+        if let view = self.appContext?.findView(withTag: viewTag, ofType: ReactNativeMediapipePoseView.self) {
+          view.switchCamera()
+        }
+      }
     }
 
-    // Defines a JavaScript function that always returns a Promise and whose native code
-    // is by default dispatched on the different thread than the JavaScript runtime runs on.
-    AsyncFunction("setValueAsync") { (value: String) in
-      // Send an event to JavaScript.
-      self.sendEvent("onChange", [
-        "value": value
-      ])
+    // Function to check camera permissions
+    AsyncFunction("requestCameraPermissions") { () -> Bool in
+      return await self.requestCameraPermissions()
     }
 
     // Enables the module to be used as a native view. Definition components that are accepted as part of the
     // view definition: Prop, Events.
     View(ReactNativeMediapipePoseView.self) {
-      // Defines a setter for the `url` prop.
-      Prop("url") { (view: ReactNativeMediapipePoseView, url: URL) in
-        if view.webView.url != url {
-          view.webView.load(URLRequest(url: url))
-        }
+      // Defines a setter for the `cameraType` prop.
+      Prop("cameraType") { (view: ReactNativeMediapipePoseView, cameraType: String) in
+        let type: AVCaptureDevice.Position = cameraType == "front" ? .front : .back
+        view.setCameraType(type)
       }
 
-      Events("onLoad")
+      Events("onCameraReady", "onError")
+    }
+  }
+  
+  private func requestCameraPermissions() async -> Bool {
+    let status = AVCaptureDevice.authorizationStatus(for: .video)
+    
+    switch status {
+    case .authorized:
+      return true
+    case .notDetermined:
+      return await AVCaptureDevice.requestAccess(for: .video)
+    case .denied, .restricted:
+      return false
+    @unknown default:
+      return false
     }
   }
 }

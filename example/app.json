@@ -14,7 +14,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "expo.modules.mediapipepose.example"
+      "bundleIdentifier": "expo.modules.mediapipepose.example",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app needs access to camera for pose detection and analysis."
+      }
     },
     "android": {
       "adaptiveIcon": {

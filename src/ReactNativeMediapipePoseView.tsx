@@ -6,6 +6,8 @@ import { ReactNativeMediapipePoseViewProps } from './ReactNativeMediapipePose.ty
 const NativeView: React.ComponentType<ReactNativeMediapipePoseViewProps> =
   requireNativeView('ReactNativeMediapipePose');
 
-export default function ReactNativeMediapipePoseView(props: ReactNativeMediapipePoseViewProps) {
+export default function ReactNativeMediapipePoseView(
+  props: ReactNativeMediapipePoseViewProps
+) {
   return <NativeView {...props} />;
 }

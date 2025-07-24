@@ -70,5 +70,7 @@
     <string>Light</string>
     <key>UIViewControllerBasedStatusBarAppearance</key>
     <false/>
+    <key>NSCameraUsageDescription</key>
+    <string>This app uses the camera to detect poses in real-time using MediaPipe technology. Camera access is required for pose detection and analysis features.</string>
   </dict>
 </plist>

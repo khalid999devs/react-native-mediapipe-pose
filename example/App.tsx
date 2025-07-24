@@ -1,50 +1,8 @@
-import { useEvent } from 'expo';
-import ReactNativeMediapipePose, { ReactNativeMediapipePoseView } from 'react-native-mediapipe-pose';
-import { Button, SafeAreaView, ScrollView, Text, View } from 'react-native';
+import React from 'react';
+import CameraExample from './CameraExample';
 
 export default function App() {
-  const onChangePayload = useEvent(ReactNativeMediapipePose, 'onChange');
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.container}>
-        <Text style={styles.header}>Module API Example</Text>
-        <Group name="Constants">
-          <Text>{ReactNativeMediapipePose.PI}</Text>
-        </Group>
-        <Group name="Functions">
-          <Text>{ReactNativeMediapipePose.hello()}</Text>
-        </Group>
-        <Group name="Async functions">
-          <Button
-            title="Set value"
-            onPress={async () => {
-              await ReactNativeMediapipePose.setValueAsync('Hello from JS!');
-            }}
-          />
-        </Group>
-        <Group name="Events">
-          <Text>{onChangePayload?.value}</Text>
-        </Group>
-        <Group name="Views">
-          <ReactNativeMediapipePoseView
-            url="https://www.example.com"
-            onLoad={({ nativeEvent: { url } }) => console.log(`Loaded: ${url}`)}
-            style={styles.view}
-          />
-        </Group>
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-function Group(props: { name: string; children: React.ReactNode }) {
-  return (
-    <View style={styles.group}>
-      <Text style={styles.groupHeader}>{props.name}</Text>
-      {props.children}
-    </View>
-  );
+  return <CameraExample />;
 }
 
 const styles = {
@@ -66,8 +24,9 @@ const styles = {
     flex: 1,
     backgroundColor: '#eee',
   },
-  view: {
-    flex: 1,
-    height: 200,
+  cameraView: {
+    height: 300,
+    backgroundColor: '#000',
+    borderRadius: 10,
   },
 };

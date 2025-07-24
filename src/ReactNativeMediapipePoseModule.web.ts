@@ -4,12 +4,25 @@ import { ReactNativeMediapipePoseModuleEvents } from './ReactNativeMediapipePose
 
 class ReactNativeMediapipePoseModule extends NativeModule<ReactNativeMediapipePoseModuleEvents> {
   PI = Math.PI;
-  async setValueAsync(value: string): Promise<void> {
-    this.emit('onChange', { value });
+
+  async switchCamera(viewTag: number): Promise<void> {
+    // Web implementation for camera switching can be handled in the component
+    console.log('Switch camera called for view:', viewTag);
   }
-  hello() {
-    return 'Hello world! 👋';
+
+  async requestCameraPermissions(): Promise<boolean> {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      stream.getTracks().forEach((track) => track.stop()); // Stop the stream immediately
+      return true;
+    } catch (error) {
+      console.error('Camera permission denied:', error);
+      return false;
+    }
   }
 }
 
-export default registerWebModule(ReactNativeMediapipePoseModule, 'ReactNativeMediapipePoseModule');
+export default registerWebModule(
+  ReactNativeMediapipePoseModule,
+  'ReactNativeMediapipePoseModule'
+);

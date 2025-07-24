@@ -25,7 +25,7 @@
 		5D26044C16BE82A9D522C786 /* Pods-reactnativemediapipeposeexample.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-reactnativemediapipeposeexample.release.xcconfig"; path = "Target Support Files/Pods-reactnativemediapipeposeexample/Pods-reactnativemediapipeposeexample.release.xcconfig"; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = reactnativemediapipeposeexample/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
-		BC6F9EF528023167E5C70354 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = reactnativemediapipeposeexample/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		BC6F9EF528023167E5C70354 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = reactnativemediapipeposeexample/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		EDA30B8725F041EA94FDE91B /* Pods-reactnativemediapipeposeexample.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-reactnativemediapipeposeexample.debug.xcconfig"; path = "Target Support Files/Pods-reactnativemediapipeposeexample/Pods-reactnativemediapipeposeexample.debug.xcconfig"; sourceTree = "<group>"; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = reactnativemediapipeposeexample/AppDelegate.swift; sourceTree = "<group>"; };
@@ -81,7 +81,6 @@
 				EDA30B8725F041EA94FDE91B /* Pods-reactnativemediapipeposeexample.debug.xcconfig */,
 				5D26044C16BE82A9D522C786 /* Pods-reactnativemediapipeposeexample.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -332,6 +331,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = reactnativemediapipeposeexample/reactnativemediapipeposeexample.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 474KTUB9B4;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
@@ -368,6 +368,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = reactnativemediapipeposeexample/reactnativemediapipeposeexample.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 474KTUB9B4;
 				INFOPLIST_FILE = reactnativemediapipeposeexample/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
