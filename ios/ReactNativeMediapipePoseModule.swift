@@ -42,7 +42,22 @@ public class ReactNativeMediapipePoseModule: Module {
         view.setCameraType(type)
       }
 
-      Events("onCameraReady", "onError")
+      // Defines a setter for the `enablePoseDetection` prop.
+      Prop("enablePoseDetection") { (view: ReactNativeMediapipePoseView, enabled: Bool) in
+        view.enablePoseDetection(enabled)
+      }
+
+      // Defines a setter for the `targetFPS` prop.
+      Prop("targetFPS") { (view: ReactNativeMediapipePoseView, fps: Int) in
+        view.setTargetFPS(fps)
+      }
+
+      // Defines a setter for the `autoAdjustFPS` prop.
+      Prop("autoAdjustFPS") { (view: ReactNativeMediapipePoseView, enabled: Bool) in
+        view.setAutoAdjustFPS(enabled)
+      }
+
+      Events("onCameraReady", "onError", "onFrameProcessed", "onPoseDetected", "onDeviceCapability")
     }
   }
   
