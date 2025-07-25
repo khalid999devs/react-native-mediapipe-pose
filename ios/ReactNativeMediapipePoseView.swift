@@ -1,6 +1,7 @@
 import ExpoModulesCore
 import AVFoundation
 import UIKit
+import MediaPipeTasksVision
 
 enum DeviceTier: String, CaseIterable {
   case high = "high"       // iPhone 12+, iPad Pro
@@ -32,6 +33,7 @@ enum DeviceTier: String, CaseIterable {
 class ReactNativeMediapipePoseView: ExpoView {
   private var captureSession: AVCaptureSession?
   private var previewLayer: AVCaptureVideoPreviewLayer?
+  private var poseOverlayLayer: CAShapeLayer?
   private var currentCameraType: AVCaptureDevice.Position = .back
   private var videoDevice: AVCaptureDevice?
   private var videoInput: AVCaptureDeviceInput?
@@ -53,8 +55,9 @@ class ReactNativeMediapipePoseView: ExpoView {
   // Device capability detection
   private var deviceTier: DeviceTier = .unknown
   
-  // Pose simulation
+  // Pose detection
   private var isPoseDetectionEnabled = false
+  private var poseDetectionService: PoseDetectionService?
   private let processingQueue = DispatchQueue(label: "pose.processing", qos: .userInitiated)
   
   let onCameraReady = EventDispatcher()
@@ -62,6 +65,8 @@ class ReactNativeMediapipePoseView: ExpoView {
   let onFrameProcessed = EventDispatcher()
   let onPoseDetected = EventDispatcher()
   let onDeviceCapability = EventDispatcher()
+  let onPoseServiceLog = EventDispatcher()
+  let onPoseServiceError = EventDispatcher()
 
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
@@ -73,10 +78,11 @@ class ReactNativeMediapipePoseView: ExpoView {
   override func layoutSubviews() {
     super.layoutSubviews()
     previewLayer?.frame = bounds
+    poseOverlayLayer?.frame = bounds
   }
   
   private func detectDeviceCapability() {
-    let deviceModel = UIDevice.current.model
+    let _ = UIDevice.current.model // Device model detection logic can be added here
     let systemVersion = UIDevice.current.systemVersion
     let processorCount = ProcessInfo.processInfo.processorCount
     let physicalMemory = ProcessInfo.processInfo.physicalMemory
@@ -174,6 +180,23 @@ class ReactNativeMediapipePoseView: ExpoView {
     if let previewLayer = previewLayer {
       layer.addSublayer(previewLayer)
     }
+    
+    // Setup pose overlay layer
+    setupPoseOverlayLayer()
+  }
+  
+  private func setupPoseOverlayLayer() {
+    poseOverlayLayer = CAShapeLayer()
+    poseOverlayLayer?.fillColor = UIColor.clear.cgColor  // Clear fill, only stroke for skeleton
+    poseOverlayLayer?.strokeColor = UIColor.cyan.cgColor
+    poseOverlayLayer?.lineWidth = 2.0  // Thinner lines like MediaPipe example
+    poseOverlayLayer?.frame = bounds
+    poseOverlayLayer?.zPosition = 1000 // Ensure it's on top
+    
+    if let poseOverlayLayer = poseOverlayLayer {
+      layer.addSublayer(poseOverlayLayer)
+      print("🎨 ReactNativeMediapipePoseView: Pose overlay layer added with frame: \(bounds)")
+    }
   }
   
   private func setupVideoOutput() {
@@ -188,11 +211,28 @@ class ReactNativeMediapipePoseView: ExpoView {
     if captureSession.canAddOutput(videoOutput!) {
       captureSession.addOutput(videoOutput!)
     }
+    
+    // Initialize pose detection service
+    setupPoseDetection()
   }
   
-  // MARK: - Pose Detection Simulation
+  private func setupPoseDetection() {
+    print("🔧 ReactNativeMediapipePoseView: Setting up pose detection service...")
+    poseDetectionService = PoseDetectionService(delegate: self)
+  }
+  
+  // MARK: - Pose Detection
   func enablePoseDetection(_ enabled: Bool) {
     isPoseDetectionEnabled = enabled
+    print("📹 ReactNativeMediapipePoseView: Pose detection \(enabled ? "enabled" : "disabled")")
+    
+    // Clear pose overlay when disabled
+    if !enabled {
+      DispatchQueue.main.async {
+        self.poseOverlayLayer?.path = nil
+        print("🎨 Pose overlay cleared (detection disabled)")
+      }
+    }
   }
   
   func setTargetFPS(_ fps: Int) {
@@ -223,7 +263,7 @@ class ReactNativeMediapipePoseView: ExpoView {
     // Simulate 33 pose landmarks (MediaPipe BlazePose format)
     var landmarks: [[String: Any]] = []
     
-    for i in 0..<33 {
+    for _ in 0..<33 {
       let landmark: [String: Any] = [
         "x": Double.random(in: 0.0...1.0),
         "y": Double.random(in: 0.0...1.0),
@@ -403,28 +443,227 @@ extension ReactNativeMediapipePoseView: AVCaptureVideoDataOutputSampleBufferDele
     guard shouldProcessFrame() else { return }
     
     if isPoseDetectionEnabled {
-      // Simulate pose detection processing time based on device tier
-      let processingDelay = getProcessingDelay()
+      print("📹 ReactNativeMediapipePoseView: Processing frame for pose detection...")
+      // Get current timestamp for MediaPipe
+      let currentTimeMs = Int(Date().timeIntervalSince1970 * 1000)
       
-      DispatchQueue.main.asyncAfter(deadline: .now() + processingDelay) {
-        let simulatedPose = self.simulatePoseDetection()
-        self.onPoseDetected([
-          "landmarks": simulatedPose,
-          "processingTime": processingDelay * 1000, // in milliseconds
-          "timestamp": CACurrentMediaTime(),
-          "deviceTier": self.deviceTier.rawValue
-        ])
+      // Determine image orientation based on device orientation
+      let orientation: UIImage.Orientation = .up
+      
+      // Pass frame to MediaPipe pose detection on background queue
+      processingQueue.async { [weak self] in
+        self?.poseDetectionService?.detectAsync(
+          sampleBuffer: sampleBuffer,
+          orientation: orientation,
+          timeStamps: currentTimeMs
+        )
       }
     }
   }
-  
-  private func getProcessingDelay() -> Double {
-    // Realistic processing delays based on device capability
-    switch deviceTier {
-    case .high: return Double.random(in: 0.001...0.003)    // 1-3ms
-    case .medium: return Double.random(in: 0.003...0.008)  // 3-8ms
-    case .low: return Double.random(in: 0.008...0.015)     // 8-15ms
-    case .unknown: return Double.random(in: 0.005...0.010) // 5-10ms
+}
+
+// MARK: - PoseDetectionServiceDelegate
+extension ReactNativeMediapipePoseView: PoseDetectionServiceDelegate {
+  func poseDetectionService(_ service: PoseDetectionService, didDetectPose result: PoseLandmarkerResult, processingTime: Double) {
+    // Convert MediaPipe result to our format
+    let landmarks = convertPoseLandmarkerResult(result)
+    print("🎯 ReactNativeMediapipePoseView: Pose detected with \(landmarks.count) landmarks, processing time: \(String(format: "%.1f", processingTime))ms")
+    
+    // Draw pose landmarks on the overlay
+    if let poseResult = result.landmarks.first {
+      drawPoseLandmarks(poseResult)
     }
+    
+    DispatchQueue.main.async {
+      self.onPoseDetected([
+        "landmarks": landmarks,
+        "processingTime": processingTime,
+        "timestamp": CACurrentMediaTime(),
+        "deviceTier": self.deviceTier.rawValue,
+        "confidence": result.landmarks.first?.first?.visibility?.doubleValue ?? 0.0
+      ])
+    }
+  }
+  
+  func poseDetectionService(_ service: PoseDetectionService, didFailWithError error: Error?, processingTime: Double) {
+    print("❌ ReactNativeMediapipePoseView: Pose detection failed: \(error?.localizedDescription ?? "Unknown error"), processing time: \(String(format: "%.1f", processingTime))ms")
+    DispatchQueue.main.async {
+      self.onPoseServiceError([
+        "error": error?.localizedDescription ?? "Unknown error",
+        "processingTime": processingTime
+      ])
+    }
+  }
+  
+  func poseDetectionService(_ service: PoseDetectionService, didLogMessage message: String, level: String) {
+    DispatchQueue.main.async {
+      self.onPoseServiceLog([
+        "message": message,
+        "level": level,
+        "timestamp": Date().timeIntervalSince1970
+      ])
+    }
+  }
+  
+  private func convertPoseLandmarkerResult(_ result: PoseLandmarkerResult) -> [[String: Any]] {
+    guard let landmarks = result.landmarks.first else { return [] }
+    
+    return landmarks.map { landmark in
+      return [
+        "x": landmark.x,
+        "y": landmark.y,
+        "z": landmark.z,
+        "visibility": landmark.visibility?.doubleValue ?? 0.0
+      ]
+    }
+  }
+  
+  private func drawPoseLandmarks(_ landmarks: [NormalizedLandmark]) {
+    print("🎨 ReactNativeMediapipePoseView: Drawing \(landmarks.count) landmarks")
+    
+    let path = UIBezierPath()
+    let viewSize = bounds.size
+    var visibleLandmarks = 0
+    
+    print("🎨 View size: \(viewSize)")
+    
+    // Get the actual video preview rect to properly scale coordinates
+    let videoRect = getVideoPreviewRect()
+    print("🎨 Video preview rect: \(videoRect)")
+    
+    // Draw landmarks as small circles (like MediaPipe example)
+    for (index, landmark) in landmarks.enumerated() {
+      let visibility = landmark.visibility?.doubleValue ?? 0.0
+      if visibility > 0.5 { // Only draw visible landmarks
+        visibleLandmarks += 1
+        
+        // Transform normalized coordinates to screen coordinates
+        let transformedPoint = transformNormalizedPoint(
+          x: landmark.x, 
+          y: landmark.y, 
+          videoRect: videoRect
+        )
+        
+        print("🎯 Landmark \(index): normalized(\(landmark.x), \(landmark.y)) -> screen(\(transformedPoint.x), \(transformedPoint.y)) visibility: \(visibility)")
+        
+        // Draw small filled circles for landmarks (like MediaPipe example)
+        let circle = UIBezierPath(arcCenter: transformedPoint, radius: 4, startAngle: 0, endAngle: .pi * 2, clockwise: true)
+        path.append(circle)
+      }
+    }
+    
+    print("🎨 Drawing \(visibleLandmarks) visible landmarks")
+    
+    // Draw pose connections (skeleton)
+    drawPoseConnections(landmarks, path: path, videoRect: videoRect)
+    
+    DispatchQueue.main.async {
+      self.poseOverlayLayer?.path = path.cgPath
+      self.poseOverlayLayer?.strokeColor = UIColor.cyan.cgColor
+      self.poseOverlayLayer?.fillColor = UIColor.cyan.cgColor  // Fill for landmark circles
+      self.poseOverlayLayer?.lineWidth = 2.0  // Match MediaPipe example
+      print("🎨 Pose path updated on main thread")
+    }
+  }
+  
+  private func transformNormalizedPoint(x: Float, y: Float, videoRect: CGRect) -> CGPoint {
+    var transformedX = CGFloat(x)
+    var transformedY = CGFloat(y)
+    
+    // Mirror horizontally for front camera (selfie mode)
+    if currentCameraType == .front {
+      transformedX = 1.0 - transformedX
+    }
+    
+    // Convert to screen coordinates within video rect
+    let screenX = videoRect.origin.x + transformedX * videoRect.width
+    let screenY = videoRect.origin.y + transformedY * videoRect.height
+    
+    return CGPoint(x: screenX, y: screenY)
+  }
+  
+  private func getVideoPreviewRect() -> CGRect {
+    guard let previewLayer = previewLayer else {
+      return bounds // Fallback to full bounds
+    }
+    
+    // Calculate the actual video preview area within the layer
+    // This accounts for aspect ratio scaling
+    let layerBounds = previewLayer.bounds
+    let videoGravity = previewLayer.videoGravity
+    
+    if videoGravity == .resizeAspectFill {
+      // For aspect fill, the video covers the entire bounds
+      return layerBounds
+    } else if videoGravity == .resizeAspect {
+      // For aspect fit, we need to calculate the actual video rect
+      // This is more complex and would require video dimensions
+      // For now, use full bounds as approximation
+      return layerBounds
+    } else {
+      // For resize (stretch), use full bounds
+      return layerBounds
+    }
+  }
+  
+  private func drawPoseConnections(_ landmarks: [NormalizedLandmark], path: UIBezierPath, videoRect: CGRect) {
+    // MediaPipe Pose connections - exact same as MediaPipe pose example
+    let connections: [(Int, Int)] = [
+      // Face connections
+      (0, 1), (1, 2), (2, 3), (3, 7),
+      (0, 4), (4, 5), (5, 6), (6, 8),
+      (9, 10), // mouth
+      
+      // Body connections
+      (11, 12), // shoulders
+      (11, 13), (13, 15), // left arm
+      (12, 14), (14, 16), // right arm
+      (11, 23), (12, 24), // torso
+      (23, 24), // hips
+      
+      // Left leg
+      (23, 25), (25, 27), (27, 29), (29, 31),
+      (27, 31), // left foot
+      
+      // Right leg
+      (24, 26), (26, 28), (28, 30), (30, 32),
+      (28, 32), // right foot
+      
+      // Hand landmarks (optional, can be enabled/disabled)
+      (15, 17), (15, 19), (15, 21), (17, 19), // left hand
+      (16, 18), (16, 20), (16, 22), (18, 20)  // right hand
+    ]
+    
+    var connectionsDrawn = 0
+    
+    for (startIdx, endIdx) in connections {
+      if startIdx < landmarks.count && endIdx < landmarks.count {
+        let startLandmark = landmarks[startIdx]
+        let endLandmark = landmarks[endIdx]
+        
+        let startVisibility = startLandmark.visibility?.doubleValue ?? 0.0
+        let endVisibility = endLandmark.visibility?.doubleValue ?? 0.0
+        
+        // Only draw if both landmarks are visible (same threshold as MediaPipe example)
+        if startVisibility > 0.5 && endVisibility > 0.5 {
+          let startPoint = transformNormalizedPoint(
+            x: startLandmark.x,
+            y: startLandmark.y,
+            videoRect: videoRect
+          )
+          let endPoint = transformNormalizedPoint(
+            x: endLandmark.x,
+            y: endLandmark.y,
+            videoRect: videoRect
+          )
+          
+          path.move(to: startPoint)
+          path.addLine(to: endPoint)
+          connectionsDrawn += 1
+        }
+      }
+    }
+    
+    print("🦴 Drew \(connectionsDrawn) pose connections")
   }
 }

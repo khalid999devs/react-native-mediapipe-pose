@@ -39,6 +39,17 @@ export type OnErrorEventPayload = {
   error: string;
 };
 
+export type PoseServiceLogEvent = {
+  message: string;
+  level: 'info' | 'debug' | 'warning' | 'error';
+  timestamp: number;
+};
+
+export type PoseServiceErrorEvent = {
+  error: string;
+  processingTime: number;
+};
+
 export type ReactNativeMediapipePoseModuleEvents = {
   onChange: (params: ChangeEventPayload) => void;
 };
@@ -58,4 +69,6 @@ export type ReactNativeMediapipePoseViewProps = {
   onFrameProcessed?: (event: { nativeEvent: FrameProcessingInfo }) => void;
   onPoseDetected?: (event: { nativeEvent: PoseDetectionResult }) => void;
   onDeviceCapability?: (event: { nativeEvent: DeviceCapability }) => void;
+  onPoseServiceLog?: (event: { nativeEvent: PoseServiceLogEvent }) => void;
+  onPoseServiceError?: (event: { nativeEvent: PoseServiceErrorEvent }) => void;
 };

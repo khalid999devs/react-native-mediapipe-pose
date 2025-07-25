@@ -6,6 +6,10 @@
 .vscode/
 jsconfig.json
 
+
+# React Native examples
+mediapipe_pose_example/
+
 # Xcode
 #
 build/

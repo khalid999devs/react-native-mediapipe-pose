@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Button,
@@ -9,6 +9,8 @@ import {
   TouchableOpacity,
   StatusBar,
   Dimensions,
+  Platform,
+  ScrollView,
 } from 'react-native';
 import ReactNativeMediapipePose, {
   ReactNativeMediapipePoseView,
@@ -20,13 +22,50 @@ import ReactNativeMediapipePose, {
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
+// MediaPipe BlazePose landmark names for debugging
+const POSE_LANDMARK_NAMES = [
+  'nose',
+  'left_eye_inner',
+  'left_eye',
+  'left_eye_outer',
+  'right_eye_inner',
+  'right_eye',
+  'right_eye_outer',
+  'left_ear',
+  'right_ear',
+  'mouth_left',
+  'mouth_right',
+  'left_shoulder',
+  'right_shoulder',
+  'left_elbow',
+  'right_elbow',
+  'left_wrist',
+  'right_wrist',
+  'left_pinky',
+  'right_pinky',
+  'left_index',
+  'right_index',
+  'left_thumb',
+  'right_thumb',
+  'left_hip',
+  'right_hip',
+  'left_knee',
+  'right_knee',
+  'left_ankle',
+  'right_ankle',
+  'left_heel',
+  'right_heel',
+  'left_foot_index',
+  'right_foot_index',
+];
+
 export default function CameraExample() {
   const [cameraType, setCameraType] = useState<CameraType>('back');
   const [permissionStatus, setPermissionStatus] = useState<string>('unknown');
   const [cameraReady, setCameraReady] = useState<boolean>(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [isPoseDetectionEnabled, setIsPoseDetectionEnabled] =
-    useState<boolean>(false);
+    useState<boolean>(true); // Enable by default for testing
   const [fps, setFps] = useState<number>(0);
   const [poseCount, setPoseCount] = useState<number>(0);
   const [processingTime, setProcessingTime] = useState<number>(0);
@@ -38,6 +77,11 @@ export default function CameraExample() {
   const [lastAutoAdjustment, setLastAutoAdjustment] = useState<string | null>(
     null
   );
+  const [poseServiceLogs, setPoseServiceLogs] = useState<string[]>([]);
+  const [lastPoseServiceError, setLastPoseServiceError] = useState<
+    string | null
+  >(null);
+  const [showDebugLogs, setShowDebugLogs] = useState<boolean>(false);
 
   useEffect(() => {
     // Request permissions on component mount
@@ -132,13 +176,65 @@ export default function CameraExample() {
 
     // Log pose data (you can use this for debugging)
     console.log(
-      `Pose detected with ${landmarks.length} landmarks, processing time: ${procTime}ms`
+      `🎯 Pose detected with ${landmarks.length} landmarks, processing time: ${procTime}ms`
     );
+
+    // Print detected keypoints for debugging
+    console.log('📍 Detected Keypoints:');
+    landmarks.forEach((landmark, index) => {
+      const { x, y, z, visibility } = landmark;
+      const landmarkName = POSE_LANDMARK_NAMES[index] || `landmark_${index}`;
+      if (visibility > 0.5) {
+        // Only log visible landmarks
+        console.log(
+          `  ${landmarkName} (${index}): x=${x.toFixed(3)}, y=${y.toFixed(3)}, z=${z.toFixed(3)}, visibility=${visibility.toFixed(3)}`
+        );
+      }
+    });
+
+    // Log visible landmarks count
+    const visibleLandmarks = landmarks.filter((l) => l.visibility > 0.5);
+    console.log(
+      `👁️ Visible landmarks: ${visibleLandmarks.length}/${landmarks.length}`
+    );
+
+    // Log key body parts for quick reference
+    const keyLandmarks = [
+      { name: 'nose', index: 0 },
+      { name: 'left_shoulder', index: 11 },
+      { name: 'right_shoulder', index: 12 },
+      { name: 'left_elbow', index: 13 },
+      { name: 'right_elbow', index: 14 },
+      { name: 'left_wrist', index: 15 },
+      { name: 'right_wrist', index: 16 },
+      { name: 'left_hip', index: 23 },
+      { name: 'right_hip', index: 24 },
+      { name: 'left_knee', index: 25 },
+      { name: 'right_knee', index: 26 },
+      { name: 'left_ankle', index: 27 },
+      { name: 'right_ankle', index: 28 },
+    ];
+
+    console.log('🦴 Key Body Parts:');
+    keyLandmarks.forEach(({ name, index }) => {
+      if (index < landmarks.length) {
+        const landmark = landmarks[index];
+        if (landmark.visibility > 0.5) {
+          console.log(
+            `  ${name}: (${landmark.x.toFixed(2)}, ${landmark.y.toFixed(2)}) visibility: ${landmark.visibility.toFixed(2)}`
+          );
+        }
+      }
+    });
   };
 
   const togglePoseDetection = () => {
-    setIsPoseDetectionEnabled(!isPoseDetectionEnabled);
-    if (!isPoseDetectionEnabled) {
+    const newState = !isPoseDetectionEnabled;
+    setIsPoseDetectionEnabled(newState);
+    console.log(
+      `🎯 Pose detection toggled: ${newState ? 'ENABLED' : 'DISABLED'}`
+    );
+    if (newState) {
       setPoseCount(0); // Reset counter when enabling
     }
   };
@@ -162,6 +258,49 @@ export default function CameraExample() {
     setShowFPSControls(!showFPSControls);
   };
 
+  const handlePoseServiceLog = ({
+    nativeEvent: { message, level, timestamp },
+  }: {
+    nativeEvent: { message: string; level: string; timestamp: number };
+  }) => {
+    console.log(`[${level.toUpperCase()}] ${message}`);
+    setPoseServiceLogs((prev) => [
+      ...prev.slice(-49), // Keep last 49 logs to allow for 50 total
+      `[${new Date(timestamp * 1000).toLocaleTimeString()}] ${message}`,
+    ]);
+  };
+
+  const handlePoseServiceError = ({
+    nativeEvent: { error, processingTime },
+  }: {
+    nativeEvent: { error: string; processingTime: number };
+  }) => {
+    console.error(`Pose Service Error: ${error} (${processingTime}ms)`);
+    setLastPoseServiceError(`${error} (${processingTime}ms)`);
+
+    // Clear error after 5 seconds
+    setTimeout(() => setLastPoseServiceError(null), 5000);
+  };
+
+  // Modal handlers with useCallback to prevent crashes
+  const closeDebugModal = useCallback(() => {
+    try {
+      setShowDebugLogs(false);
+    } catch (error) {
+      console.error('Error closing debug modal:', error);
+    }
+  }, []);
+
+  const clearDebugLogs = useCallback(() => {
+    try {
+      setPoseServiceLogs([]);
+      setLastPoseServiceError(null);
+      setShowDebugLogs(false);
+    } catch (error) {
+      console.error('Error clearing debug logs:', error);
+    }
+  }, []);
+
   return (
     <View style={styles.container}>
       <StatusBar
@@ -182,6 +321,8 @@ export default function CameraExample() {
         onFrameProcessed={handleFrameProcessed}
         onPoseDetected={handlePoseDetected}
         onDeviceCapability={handleDeviceCapability}
+        onPoseServiceLog={handlePoseServiceLog}
+        onPoseServiceError={handlePoseServiceError}
       />
 
       {/* Camera Not Ready Overlay */}
@@ -304,6 +445,21 @@ export default function CameraExample() {
             </View>
           )}
 
+          {/* Debug Logs Toggle */}
+          {(poseServiceLogs.length > 0 || lastPoseServiceError) && (
+            <TouchableOpacity
+              style={styles.debugToggleButton}
+              onPress={() => setShowDebugLogs(true)}
+            >
+              <Text style={styles.debugToggleText}>
+                🔍 Show Logs{' '}
+                {lastPoseServiceError
+                  ? '(Error)'
+                  : `(${poseServiceLogs.length})`}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           {/* Auto-Adjustment Notification */}
           {lastAutoAdjustment && (
             <View style={styles.autoAdjustNotification}>
@@ -360,6 +516,74 @@ export default function CameraExample() {
             ]}
           />
         </View>
+      )}
+
+      {/* Debug Logs Modal */}
+      {showDebugLogs && (
+        <TouchableOpacity
+          style={styles.debugModalOverlay}
+          activeOpacity={1}
+          onPress={closeDebugModal}
+        >
+          <TouchableOpacity
+            style={styles.debugModal}
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.debugModalHeader}>
+              <Text style={styles.debugModalTitle}>
+                🔍 Pose Service Debug Logs
+              </Text>
+              <TouchableOpacity
+                style={styles.debugCloseButton}
+                onPress={closeDebugModal}
+              >
+                <Text style={styles.debugCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {lastPoseServiceError && (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>❌ {lastPoseServiceError}</Text>
+              </View>
+            )}
+
+            {poseServiceLogs.length > 0 ? (
+              <View style={styles.logsContainer}>
+                <Text style={styles.logsHeader}>
+                  Recent Logs ({poseServiceLogs.length}):
+                </Text>
+                <ScrollView
+                  style={styles.logsScrollView}
+                  showsVerticalScrollIndicator={true}
+                  nestedScrollEnabled={true}
+                >
+                  {poseServiceLogs.map((log, index) => (
+                    <Text key={index} style={styles.logText}>
+                      {log}
+                    </Text>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : (
+              !lastPoseServiceError && (
+                <View style={styles.logsContainer}>
+                  <Text style={styles.logsHeader}>No logs available</Text>
+                  <Text style={styles.logText}>
+                    Waiting for pose detection service logs...
+                  </Text>
+                </View>
+              )
+            )}
+
+            <TouchableOpacity
+              style={styles.debugClearButton}
+              onPress={clearDebugLogs}
+            >
+              <Text style={styles.debugClearText}>Clear Logs</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
       )}
     </View>
   );
@@ -579,5 +803,121 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     textAlign: 'center',
+  },
+  debugOverlay: {
+    position: 'absolute',
+    top: 50,
+    right: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    borderRadius: 10,
+    padding: 10,
+    maxWidth: 300,
+    zIndex: 100,
+  },
+  debugTitle: {
+    color: '#4CAF50',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  debugToggleButton: {
+    backgroundColor: 'rgba(76, 175, 80, 0.8)',
+    borderRadius: 15,
+    padding: 8,
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  debugToggleText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  debugModalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  debugModal: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    padding: 20,
+    width: '90%',
+    maxHeight: '85%',
+    minHeight: '40%',
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+  },
+  debugModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  debugModalTitle: {
+    color: '#4CAF50',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  debugCloseButton: {
+    backgroundColor: 'rgba(244, 67, 54, 0.8)',
+    borderRadius: 15,
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  debugCloseText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  debugClearButton: {
+    backgroundColor: '#FF9800',
+    borderRadius: 10,
+    padding: 12,
+    alignItems: 'center',
+    marginTop: 15,
+  },
+  debugClearText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  logsHeader: {
+    color: '#4CAF50',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  errorContainer: {
+    backgroundColor: 'rgba(244, 67, 54, 0.2)',
+    borderRadius: 6,
+    padding: 8,
+    marginBottom: 8,
+  },
+  errorText: {
+    color: '#FF5252',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  logsContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 6,
+    padding: 8,
+    maxHeight: 300,
+    minHeight: 150,
+  },
+  logsScrollView: {
+    maxHeight: 250,
+    minHeight: 120,
+  },
+  logText: {
+    color: '#E0E0E0',
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    marginBottom: 3,
+    lineHeight: 14,
   },
 });

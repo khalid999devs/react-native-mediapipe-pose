@@ -57,7 +57,7 @@ public class ReactNativeMediapipePoseModule: Module {
         view.setAutoAdjustFPS(enabled)
       }
 
-      Events("onCameraReady", "onError", "onFrameProcessed", "onPoseDetected", "onDeviceCapability")
+      Events("onCameraReady", "onError", "onFrameProcessed", "onPoseDetected", "onDeviceCapability", "onPoseServiceLog", "onPoseServiceError")
     }
   }
   
