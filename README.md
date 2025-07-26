@@ -73,16 +73,166 @@ yarn add react-native-mediapipe-pose
 
 ### iOS Setup
 
-Add the MediaPipe pose detection model to your iOS project:
+⚠️ **CRITICAL: Manual Configuration Required**
 
-1. Download the MediaPipe pose model file (`pose_landmarker_full.task`)
-2. Add it to your iOS project bundle
-3. Ensure camera permissions in `Info.plist`:
+Your app will crash without these steps. The package cannot automatically configure these settings for security reasons.
+
+#### 1. Camera Permissions (REQUIRED)
+
+Add camera permission to your app's `ios/YourAppName/Info.plist`:
 
 ```xml
 <key>NSCameraUsageDescription</key>
 <string>This app needs camera access for pose detection</string>
 ```
+
+**Alternative descriptions you can use:**
+
+```xml
+<!-- For fitness apps -->
+<string>Camera access is required for real-time pose tracking and exercise analysis</string>
+
+<!-- For AR/entertainment apps -->
+<string>Camera access enables pose detection for interactive experiences</string>
+
+<!-- Generic -->
+<string>This app uses the camera to detect and analyze human poses in real-time</string>
+```
+
+#### 2. Minimum iOS Version (REQUIRED)
+
+Ensure your app targets **iOS 13.0+** (MediaPipe requirement):
+
+**In `ios/YourApp.xcodeproj`:**
+
+1. Select your project in Xcode
+2. Go to Build Settings → Deployment Target
+3. Set **iOS Deployment Target** to `13.0` or higher
+
+**In `package.json`:**
+
+```json
+{
+  "engines": {
+    "ios": ">=13.0"
+  }
+}
+```
+
+#### 3. iOS Dependencies (AUTO-INSTALLED)
+
+iOS dependencies are automatically installed when you build your app. However, if you encounter issues, you can manually run:
+
+```bash
+cd ios
+pod install
+cd ..
+```
+
+**Note**: Modern React Native (0.72+) and Expo automatically handle pod installation during the build process.
+
+#### 4. Performance Optimization (RECOMMENDED)
+
+For better camera performance, add to `ios/YourAppName/Info.plist`:
+
+```xml
+<key>CADisableMinimumFrameDurationOnPhone</key>
+<true/>
+```
+
+#### 5. Orientation Support (OPTIONAL)
+
+If you want to support different orientations, configure in `ios/YourAppName/Info.plist`:
+
+```xml
+<!-- For iPhone - Portrait only (recommended for pose detection) -->
+<key>UISupportedInterfaceOrientations</key>
+<array>
+  <string>UIInterfaceOrientationPortrait</string>
+</array>
+
+<!-- For iPad - All orientations -->
+<key>UISupportedInterfaceOrientations~ipad</key>
+<array>
+  <string>UIInterfaceOrientationPortrait</string>
+  <string>UIInterfaceOrientationPortraitUpsideDown</string>
+  <string>UIInterfaceOrientationLandscapeLeft</string>
+  <string>UIInterfaceOrientationLandscapeRight</string>
+</array>
+```
+
+#### 6. MediaPipe Model (AUTO-INCLUDED)
+
+The MediaPipe pose detection model (`pose_landmarker_full.task`) is automatically included with the package. No manual download required.
+
+#### 7. Complete Info.plist Example
+
+Your `ios/YourAppName/Info.plist` should include at minimum:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Your existing keys... -->
+
+  <!-- REQUIRED: Camera permission -->
+  <key>NSCameraUsageDescription</key>
+  <string>This app needs camera access for pose detection</string>
+
+  <!-- REQUIRED: Minimum iOS version -->
+  <key>LSMinimumSystemVersion</key>
+  <string>13.0</string>
+
+  <!-- RECOMMENDED: Performance optimization -->
+  <key>CADisableMinimumFrameDurationOnPhone</key>
+  <true/>
+
+  <!-- RECOMMENDED: Portrait orientation for best pose detection -->
+  <key>UISupportedInterfaceOrientations</key>
+  <array>
+    <string>UIInterfaceOrientationPortrait</string>
+  </array>
+
+  <!-- Your other existing keys... -->
+</dict>
+</plist>
+```
+
+#### 8. Verification Steps
+
+After configuration, verify your setup:
+
+1. **Build and run** your app on a physical iOS device
+2. **Check camera permission** - app should prompt for camera access
+3. **Test pose detection** - camera should display with pose overlay
+4. **Check console logs** - look for MediaPipe initialization messages
+
+#### 9. Common Issues & Solutions
+
+**App crashes immediately:**
+
+- ✅ Check that `NSCameraUsageDescription` is added to Info.plist
+- ✅ Ensure iOS deployment target is 13.0+
+- ✅ Try cleaning build: `npx expo run:ios --clear`
+- ✅ If issues persist, manually run `cd ios && pod install`
+
+**Camera permission denied:**
+
+- ✅ Add proper `NSCameraUsageDescription`
+- ✅ Manually enable camera permission in iOS Settings → Privacy → Camera
+
+**Pose detection not working:**
+
+- ✅ Test on physical device (camera not available in simulator)
+- ✅ Ensure good lighting conditions
+- ✅ Check that `enablePoseDetection={true}`
+
+**Performance issues:**
+
+- ✅ Add `CADisableMinimumFrameDurationOnPhone` to Info.plist
+- ✅ Set `enablePoseDataStreaming={false}` for production
+- ✅ Use `autoAdjustFPS={true}` for device optimization
 
 ### Android Setup
 
@@ -158,7 +308,19 @@ export default function App() {
   };
 
   const switchCamera = () => {
+    // Enhanced camera switching with full refresh to prevent coordinate system issues
+    const wasEnabled = isPoseDetectionEnabled;
+    setIsPoseDetectionEnabled(false); // Temporarily disable
+
+    // Switch camera type
     setCameraType((current) => (current === 'back' ? 'front' : 'back'));
+
+    // Re-enable pose detection after brief delay for proper initialization
+    setTimeout(() => {
+      if (wasEnabled) {
+        setIsPoseDetectionEnabled(true);
+      }
+    }, 100);
   };
 
   React.useEffect(() => {
@@ -168,6 +330,7 @@ export default function App() {
   return (
     <View style={styles.container}>
       <ReactNativeMediapipePoseView
+        key={`camera-${cameraType}`} // Force re-render on camera switch
         style={styles.camera}
         cameraType={cameraType}
         enablePoseDetection={isPoseDetectionEnabled}
@@ -292,6 +455,7 @@ export default function OptimizedPoseDetection() {
   return (
     <View style={styles.container}>
       <ReactNativeMediapipePoseView
+        key={`camera-optimized-${Date.now()}`} // Ensure clean re-renders
         style={styles.camera}
         enablePoseDetection={true}
         // Performance optimizations (recommended for production)
@@ -455,93 +619,241 @@ const styles = StyleSheet.create({
 
 ## 📚 API Reference
 
-### Props
+### ReactNativeMediapipePoseView Props
 
 #### Core Properties
 
-| Prop                  | Type                   | Default   | Description                   |
-| --------------------- | ---------------------- | --------- | ----------------------------- |
-| `style`               | `StyleProp<ViewStyle>` | -         | Camera view styling           |
-| `cameraType`          | `'front' \| 'back'`    | `'front'` | Camera position               |
-| `enablePoseDetection` | `boolean`              | `false`   | Enable/disable pose detection |
+| Prop                  | Type                   | Default   | Description                                        |
+| --------------------- | ---------------------- | --------- | -------------------------------------------------- |
+| `style`               | `StyleProp<ViewStyle>` | -         | Camera view styling and layout properties          |
+| `cameraType`          | `'front' \| 'back'`    | `'front'` | Camera position selection (front-facing or back)   |
+| `enablePoseDetection` | `boolean`              | `false`   | Enable/disable real-time pose detection processing |
 
-#### Performance Optimization
+#### Performance & Data Control
 
-| Prop                      | Type      | Default | Description                                      |
-| ------------------------- | --------- | ------- | ------------------------------------------------ |
-| `enablePoseDataStreaming` | `boolean` | `false` | Enable pose data transmission to React Native    |
-| `poseDataThrottleMs`      | `number`  | `100`   | Throttle pose data events (ms)                   |
-| `enableDetailedLogs`      | `boolean` | `false` | Enable detailed logging (disable for production) |
-| `fpsChangeThreshold`      | `number`  | `2.0`   | Minimum FPS change to report                     |
-| `fpsReportThrottleMs`     | `number`  | `500`   | Throttle FPS reports (ms)                        |
+| Prop                      | Type      | Default | Description                                                   |
+| ------------------------- | --------- | ------- | ------------------------------------------------------------- |
+| `enablePoseDataStreaming` | `boolean` | `false` | **CRITICAL**: Enable pose data transmission to React Native   |
+| `poseDataThrottleMs`      | `number`  | `100`   | Throttle pose data events to reduce bridge overhead (ms)      |
+| `enableDetailedLogs`      | `boolean` | `false` | Enable comprehensive logging (disable for production)         |
+| `fpsChangeThreshold`      | `number`  | `2.0`   | Minimum FPS change required to trigger onFrameProcessed event |
+| `fpsReportThrottleMs`     | `number`  | `500`   | Throttle frequency for FPS reporting to reduce bridge calls   |
 
-#### Frame Rate Control
+#### Frame Rate & Performance Optimization
 
-| Prop            | Type      | Default | Description                     |
-| --------------- | --------- | ------- | ------------------------------- |
-| `targetFPS`     | `number`  | `30`    | Target frames per second        |
-| `autoAdjustFPS` | `boolean` | `true`  | Enable automatic FPS adjustment |
+| Prop            | Type      | Default | Description                                                |
+| --------------- | --------- | ------- | ---------------------------------------------------------- |
+| `targetFPS`     | `number`  | `30`    | Target frames per second for pose detection processing     |
+| `autoAdjustFPS` | `boolean` | `true`  | Enable automatic FPS adjustment based on device capability |
 
-### Events
+### Events & Callbacks
 
-#### onPoseDetected
+#### Core Event Handlers
+
+| Event              | Type                                                    | Description                                           |
+| ------------------ | ------------------------------------------------------- | ----------------------------------------------------- |
+| `onCameraReady`    | `(event: { nativeEvent: { ready: boolean } }) => void`  | Triggered when camera initializes and is ready to use |
+| `onError`          | `(event: { nativeEvent: { error: string } }) => void`   | Camera or pose detection errors                       |
+| `onPoseDetected`   | `(event: { nativeEvent: PoseDetectionResult }) => void` | **Requires enablePoseDataStreaming=true**             |
+| `onFrameProcessed` | `(event: { nativeEvent: FrameProcessingInfo }) => void` | Frame processing statistics and FPS monitoring        |
+
+#### Performance Monitoring Events
+
+| Event                | Type                                                      | Description                                      |
+| -------------------- | --------------------------------------------------------- | ------------------------------------------------ |
+| `onDeviceCapability` | `(event: { nativeEvent: DeviceCapability }) => void`      | Device performance tier and recommended settings |
+| `onGPUStatus`        | `(event: { nativeEvent: GPUStatusEvent }) => void`        | GPU acceleration status and delegate information |
+| `onPoseServiceLog`   | `(event: { nativeEvent: PoseServiceLogEvent }) => void`   | **Requires enableDetailedLogs=true**             |
+| `onPoseServiceError` | `(event: { nativeEvent: PoseServiceErrorEvent }) => void` | Pose service specific errors and recovery info   |
+
+### Data Types & Interfaces
+
+#### PoseDetectionResult
+
+**Available only when `enablePoseDataStreaming={true}`**
 
 ```tsx
-onPoseDetected?: (event: { nativeEvent: PoseDetectionResult }) => void;
-```
+interface PoseDetectionResult {
+  landmarks: PoseLandmark[]; // Array of 33 pose landmarks with coordinates
+  processingTime: number; // Processing time in milliseconds
+  timestamp: number; // Detection timestamp (Unix time)
+  confidence: number; // Overall detection confidence (0.0 - 1.0)
 
-**PoseDetectionResult:**
-
-```tsx
-{
-  landmarks: PoseLandmark[];      // Array of detected pose landmarks
-  processingTime: number;         // Processing time in milliseconds
-  timestamp: number;              // Detection timestamp
-  confidence: number;             // Overall detection confidence (0-1)
-  // Available only when enableDetailedLogs is true:
-  deviceTier?: string;            // Device performance tier
-  gpuAccelerated?: boolean;       // GPU acceleration status
-  processingUnit?: string;        // Processing unit description
-  delegate?: string;              // MediaPipe delegate type
+  // Extended data (when enableDetailedLogs=true):
+  deviceTier?: string; // 'high' | 'medium' | 'low'
+  gpuAccelerated?: boolean; // Current GPU acceleration status
+  processingUnit?: string; // 'GPU' | 'CPU' processing unit
+  delegate?: string; // MediaPipe delegate type ('GPU' | 'CPU')
 }
 ```
 
-**PoseLandmark:**
+#### PoseLandmark
+
+**33 Body Landmarks with 3D Coordinates**
 
 ```tsx
-{
-  x: number; // Normalized x coordinate (0-1)
-  y: number; // Normalized y coordinate (0-1)
-  z: number; // Normalized z coordinate (depth)
-  visibility: number; // Visibility confidence (0-1)
+interface PoseLandmark {
+  x: number; // Normalized x coordinate (0.0 - 1.0)
+  y: number; // Normalized y coordinate (0.0 - 1.0)
+  z: number; // Normalized z coordinate (depth, relative to hips)
+  visibility: number; // Landmark visibility confidence (0.0 - 1.0)
+}
+
+// Landmark indices (0-32):
+// 0: nose, 1-6: eyes, 7-8: ears, 9-10: mouth corners
+// 11-12: shoulders, 13-14: elbows, 15-16: wrists
+// 17-22: hand landmarks, 23-24: hips, 25-26: knees
+// 27-28: ankles, 29-30: heels, 31-32: foot indices
+```
+
+#### FrameProcessingInfo
+
+```tsx
+interface FrameProcessingInfo {
+  fps: number; // Current frames per second
+  autoAdjusted?: boolean; // Whether FPS was automatically adjusted
+  newTargetFPS?: number; // New target FPS after auto-adjustment
+  reason?: string; // Reason for FPS adjustment
+  processingTime?: number; // Frame processing time (ms)
+  droppedFrames?: number; // Count of dropped frames
 }
 ```
 
-#### Other Events
+#### DeviceCapability
+
+**Automatic Device Performance Detection**
 
 ```tsx
-onCameraReady?: (event: { nativeEvent: { ready: boolean } }) => void;
-onError?: (event: { nativeEvent: { error: string } }) => void;
-onFrameProcessed?: (event: { nativeEvent: FrameProcessingInfo }) => void;
-onDeviceCapability?: (event: { nativeEvent: DeviceCapability }) => void;
-onGPUStatus?: (event: { nativeEvent: GPUStatusEvent }) => void;
-onPoseServiceLog?: (event: { nativeEvent: PoseServiceLogEvent }) => void;
-onPoseServiceError?: (event: { nativeEvent: PoseServiceErrorEvent }) => void;
+interface DeviceCapability {
+  deviceTier: 'high' | 'medium' | 'low'; // Performance classification
+  recommendedFPS: number; // Optimal FPS for this device
+  processorCount: number; // Number of CPU cores
+  physicalMemoryGB: number; // Available RAM in GB
+
+  // Device classification examples:
+  // high: iPhone 12 Pro+, iPad Pro M1+ → 60 FPS, GPU acceleration
+  // medium: iPhone XS-12, iPad Air → 30 FPS, GPU acceleration
+  // low: iPhone X-, older iPads → 15 FPS, CPU processing
+}
 ```
 
-### Methods
+#### GPUStatusEvent
+
+```tsx
+interface GPUStatusEvent {
+  isUsingGPU: boolean; // Current GPU acceleration status
+  delegate: string; // 'GPU' | 'CPU' delegate type
+  processingUnit: string; // Detailed processing unit description
+  deviceTier: string; // Device performance tier
+  metalSupported?: boolean; // Metal framework availability (iOS)
+}
+```
+
+#### PoseServiceLogEvent & PoseServiceErrorEvent
+
+**Available only when `enableDetailedLogs={true}`**
+
+```tsx
+interface PoseServiceLogEvent {
+  message: string; // Log message content
+  level: string; // Log level ('info', 'warning', 'debug')
+  timestamp: number; // Log timestamp
+}
+
+interface PoseServiceErrorEvent {
+  error: string; // Error description
+  processingTime: number; // Time when error occurred (ms)
+  recoverable?: boolean; // Whether error is recoverable
+  suggestion?: string; // Recovery suggestion
+}
+```
+
+### Static Methods
+
+#### ReactNativeMediapipePose Module Methods
 
 ```tsx
 import ReactNativeMediapipePose from 'react-native-mediapipe-pose';
 
-// Switch camera (requires view tag)
-await ReactNativeMediapipePose.switchCamera(viewTag);
+// Camera permission management
+const granted: boolean = await ReactNativeMediapipePose.requestCameraPermissions();
 
-// Request camera permissions
-const granted = await ReactNativeMediapipePose.requestCameraPermissions();
+// Camera switching (requires view reference)
+await ReactNativeMediapipePose.switchCamera(viewTag: number);
 
-// Get GPU acceleration status (requires view tag)
-const gpuStatus = ReactNativeMediapipePose.getGPUStatus(viewTag);
+// GPU status inquiry (requires view reference)
+const gpuStatus = await ReactNativeMediapipePose.getGPUStatus(viewTag: number);
+```
+
+### Performance Configuration Guide
+
+#### Production Optimization (Maximum Performance)
+
+```tsx
+<ReactNativeMediapipePoseView
+  enablePoseDetection={true}
+  // CRITICAL: Disable data streaming for max performance
+  enablePoseDataStreaming={false} // Eliminates bridge overhead
+  enableDetailedLogs={false} // Reduces logging overhead
+  // Optimize bridge communication
+  poseDataThrottleMs={200} // Higher throttling
+  fpsReportThrottleMs={1000} // Reduce FPS reports
+  fpsChangeThreshold={5.0} // Only significant changes
+  // Auto-optimization
+  autoAdjustFPS={true} // Device-based adjustment
+  targetFPS={30} // Conservative target
+  // Essential events only
+  onFrameProcessed={handleFPS} // Monitor performance
+  onDeviceCapability={handleDevice} // Device optimization
+  onError={handleErrors} // Error handling
+  // onPoseDetected - NOT NEEDED when streaming disabled
+/>
+```
+
+#### Development & Debugging (Full Monitoring)
+
+```tsx
+<ReactNativeMediapipePoseView
+  enablePoseDetection={true}
+  // Enable all data for development
+  enablePoseDataStreaming={true} // Access pose data
+  enableDetailedLogs={true} // Comprehensive logging
+  // Fast updates for development
+  poseDataThrottleMs={50} // Fast pose data
+  fpsReportThrottleMs={250} // Frequent FPS updates
+  fpsChangeThreshold={1.0} // Sensitive monitoring
+  // Performance monitoring
+  targetFPS={60} // High target for testing
+  autoAdjustFPS={true} // Test auto-adjustment
+  // Full event monitoring
+  onPoseDetected={handlePoseData} // Process pose landmarks
+  onFrameProcessed={handleFrames} // Monitor performance
+  onDeviceCapability={handleDevice} // Device analysis
+  onGPUStatus={handleGPU} // GPU monitoring
+  onPoseServiceLog={handleLogs} // Service logs
+  onPoseServiceError={handleErrors} // Error analysis
+/>
+```
+
+#### Hybrid Mode (Selective Data Streaming)
+
+```tsx
+const [needsPoseData, setNeedsPoseData] = useState(false);
+
+<ReactNativeMediapipePoseView
+  enablePoseDetection={true}
+  // Dynamic data streaming
+  enablePoseDataStreaming={needsPoseData} // Toggle as needed
+  enableDetailedLogs={__DEV__} // Dev-only logging
+  // Balanced performance
+  poseDataThrottleMs={100} // Moderate throttling
+  fpsReportThrottleMs={500} // Standard reporting
+  autoAdjustFPS={true} // Auto-optimization
+  // Conditional pose data handling
+  onPoseDetected={needsPoseData ? handlePoseData : undefined}
+  onFrameProcessed={handlePerformance}
+  onDeviceCapability={handleCapability}
+/>;
 ```
 
 ## ⚡ Performance Guidelines

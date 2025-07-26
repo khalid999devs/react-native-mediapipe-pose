@@ -184,10 +184,29 @@ export default function CameraExample() {
   };
 
   /**
-   * Switch between front and back camera
+   * Switch between front and back camera with full refresh
    */
   const switchCamera = () => {
+    // Temporarily disable pose detection to force a clean reset
+    const wasEnabled = isPoseDetectionEnabled;
+    setIsPoseDetectionEnabled(false);
+    setCameraReady(false);
+
+    // Reset all pose-related state
+    setPoseCount(0);
+    setProcessingTime(0);
+    setLiveLogs([]);
+    setLastError(null);
+
+    // Switch camera type
     setCameraType((current) => (current === 'back' ? 'front' : 'back'));
+
+    // Re-enable pose detection after a brief delay to ensure proper initialization
+    setTimeout(() => {
+      if (wasEnabled) {
+        setIsPoseDetectionEnabled(true);
+      }
+    }, 100);
   };
 
   /**
@@ -403,6 +422,7 @@ export default function CameraExample() {
 
       {/* Fullscreen Camera */}
       <ReactNativeMediapipePoseView
+        key={`camera-${cameraType}`} // Force re-render when camera type changes
         style={styles.camera}
         cameraType={cameraType}
         enablePoseDetection={isPoseDetectionEnabled}
