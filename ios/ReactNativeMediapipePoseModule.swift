@@ -32,6 +32,14 @@ public class ReactNativeMediapipePoseModule: Module {
     AsyncFunction("requestCameraPermissions") { () -> Bool in
       return await self.requestCameraPermissions()
     }
+    
+    // Function to get GPU status
+    Function("getGPUStatus") { (viewTag: Int) -> [String: Any] in
+      if let view = self.appContext?.findView(withTag: viewTag, ofType: ReactNativeMediapipePoseView.self) {
+        return view.getGPUStatus()
+      }
+      return [:]
+    }
 
     // Enables the module to be used as a native view. Definition components that are accepted as part of the
     // view definition: Prop, Events.
@@ -57,7 +65,32 @@ public class ReactNativeMediapipePoseModule: Module {
         view.setAutoAdjustFPS(enabled)
       }
 
-      Events("onCameraReady", "onError", "onFrameProcessed", "onPoseDetected", "onDeviceCapability", "onPoseServiceLog", "onPoseServiceError")
+      // Defines a setter for the `enablePoseDataStreaming` prop.
+      Prop("enablePoseDataStreaming") { (view: ReactNativeMediapipePoseView, enabled: Bool) in
+        view.setEnablePoseDataStreaming(enabled)
+      }
+
+      // Defines a setter for the `poseDataThrottleMs` prop.
+      Prop("poseDataThrottleMs") { (view: ReactNativeMediapipePoseView, throttleMs: Int) in
+        view.setPoseDataThrottleMs(throttleMs)
+      }
+
+      // Defines a setter for the `enableDetailedLogs` prop.
+      Prop("enableDetailedLogs") { (view: ReactNativeMediapipePoseView, enabled: Bool) in
+        view.setEnableDetailedLogs(enabled)
+      }
+
+      // Defines a setter for the `fpsChangeThreshold` prop.
+      Prop("fpsChangeThreshold") { (view: ReactNativeMediapipePoseView, threshold: Double) in
+        view.setFPSChangeThreshold(threshold)
+      }
+
+      // Defines a setter for the `fpsReportThrottleMs` prop.
+      Prop("fpsReportThrottleMs") { (view: ReactNativeMediapipePoseView, throttleMs: Double) in
+        view.setFPSReportThrottleMs(throttleMs)
+      }
+
+      Events("onCameraReady", "onError", "onFrameProcessed", "onPoseDetected", "onDeviceCapability", "onPoseServiceLog", "onPoseServiceError", "onGPUStatus")
     }
   }
   

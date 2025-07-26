@@ -13,6 +13,11 @@ export type PoseDetectionResult = {
   landmarks: PoseLandmark[];
   processingTime: number; // in milliseconds
   timestamp: number;
+  deviceTier?: string;
+  confidence?: number;
+  gpuAccelerated?: boolean; // New: indicates if GPU acceleration is being used
+  processingUnit?: string; // New: describes the processing unit (Neural Engine/GPU vs CPU)
+  delegate?: string; // New: MediaPipe delegate type (GPU or CPU)
 };
 
 export type FrameProcessingInfo = {
@@ -50,6 +55,14 @@ export type PoseServiceErrorEvent = {
   processingTime: number;
 };
 
+export type GPUStatusEvent = {
+  isUsingGPU: boolean;
+  delegate: 'GPU' | 'CPU';
+  deviceTier: string;
+  maxAccuracy: boolean;
+  processingUnit: string;
+};
+
 export type ReactNativeMediapipePoseModuleEvents = {
   onChange: (params: ChangeEventPayload) => void;
 };
@@ -62,6 +75,11 @@ export type ReactNativeMediapipePoseViewProps = {
   style?: StyleProp<ViewStyle>;
   cameraType?: CameraType;
   enablePoseDetection?: boolean;
+  enablePoseDataStreaming?: boolean; // New: controls whether to send pose data events (default: false for performance)
+  poseDataThrottleMs?: number; // New: throttle pose data events (default: 100ms)
+  enableDetailedLogs?: boolean; // New: controls detailed logging (default: false for performance)
+  fpsChangeThreshold?: number; // New: minimum FPS change to report (default: 2.0)
+  fpsReportThrottleMs?: number; // New: throttle FPS reports (default: 500ms)
   targetFPS?: number;
   autoAdjustFPS?: boolean;
   onCameraReady?: (event: { nativeEvent: OnCameraReadyEventPayload }) => void;
@@ -71,4 +89,5 @@ export type ReactNativeMediapipePoseViewProps = {
   onDeviceCapability?: (event: { nativeEvent: DeviceCapability }) => void;
   onPoseServiceLog?: (event: { nativeEvent: PoseServiceLogEvent }) => void;
   onPoseServiceError?: (event: { nativeEvent: PoseServiceErrorEvent }) => void;
+  onGPUStatus?: (event: { nativeEvent: GPUStatusEvent }) => void; // New GPU status event
 };

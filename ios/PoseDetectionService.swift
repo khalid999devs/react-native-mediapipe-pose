@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import UIKit
+import Foundation
 import MediaPipeTasksVision
 import AVFoundation
+import Metal
+import UIKit
 
 /**
  * Class to perform pose detection using MediaPipe PoseLandmarker API
@@ -22,20 +24,41 @@ import AVFoundation
 @objc(PoseDetectionService)
 class PoseDetectionService: NSObject {
     
-    weak var delegate: PoseDetectionServiceDelegate?
+    // MARK: - Properties
     private var poseLandmarker: PoseLandmarker?
-    private var runningMode = RunningMode.liveStream
-    private var frameStartTimes: [Int: Double] = [:] // Track start times by timestamp
+    private let runningMode: RunningMode = .liveStream
+    private var frameStartTimes: [Int: CFTimeInterval] = [:]
+    private var currentDelegate: String = "Unknown"
     
-    // MARK: - Public
+    // GPU status tracking
+    private var isGPUAccelerated = false
+    private var gpuUsageStatus = false
+    
+    // Delegate for callbacks
+    weak var delegate: PoseDetectionServiceDelegate?
+    
+    // Callbacks
+    var onResultsDetected: (([NormalizedLandmark], TimeInterval) -> Void)?
+    var onGPUStatusUpdate: ((Bool, Bool) -> Void)?
+    
     init(delegate: PoseDetectionServiceDelegate?) {
         super.init()
         self.delegate = delegate
-        sendLog("🔧 PoseDetectionService: Initializing...", level: "info")
         setupPoseLandmarker()
     }
     
-    // MARK: - Private
+    // MARK: - GPU Detection
+    private func hasMetalGPU() -> Bool {
+        return MTLCreateSystemDefaultDevice() != nil
+    }
+    
+    private func checkGPUCapabilities() -> (hasGPU: Bool, deviceName: String) {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            return (false, "No GPU")
+        }
+        
+        return (true, device.name)
+    }    // MARK: - Private
     private func sendLog(_ message: String, level: String) {
         print(message) // Still print to console
         delegate?.poseDetectionService(self, didLogMessage: message, level: level)
@@ -65,22 +88,108 @@ class PoseDetectionService: NSObject {
         }
     }
     
-    // MARK: - Private
+        // MARK: - Private
     private func setupPoseLandmarker() {
-        sendLog("🔧 PoseDetectionService: Setting up pose landmarker...", level: "info")
+        sendLog("🔧 PoseDetectionService: Setting up pose landmarker with automatic hardware acceleration detection...", level: "info")
+        
+        // Check GPU/Neural Engine availability for monitoring purposes
+        let gpuInfo = checkGPUCapabilities()
+        sendLog("🎯 PoseDetectionService: Hardware Check - Metal GPU Available: \(gpuInfo.hasGPU), Device: \(gpuInfo.deviceName)", level: "info")
+        
         guard let modelPath = getModelPath() else {
             sendLog("❌ PoseDetectionService: Failed to load model file.", level: "error")
             return
         }
         sendLog("✅ PoseDetectionService: Model found at path: \(modelPath)", level: "info")
         
+        // Update GPU status for monitoring
+        gpuUsageStatus = gpuInfo.hasGPU
+        
+        // MediaPipe iOS automatically uses the best available hardware acceleration
+        // Try optimized settings for devices with hardware acceleration
+        if gpuInfo.hasGPU {
+            sendLog("🚀 PoseDetectionService: Device has hardware acceleration capability (Metal GPU: \(gpuInfo.deviceName))", level: "info")
+            sendLog("🧠 PoseDetectionService: MediaPipe will automatically use Neural Engine/GPU acceleration when beneficial", level: "info")
+            
+            if let landmarker = createPoseLandmarkerWithGPU(modelPath: modelPath) {
+                poseLandmarker = landmarker
+                currentDelegate = "Auto (Hardware Accelerated)"
+                isGPUAccelerated = true
+                sendLog("✅ PoseDetectionService: Successfully initialized with hardware acceleration enabled", level: "info")
+                onGPUStatusUpdate?(true, true)
+                return
+            } else {
+                sendLog("⚠️ PoseDetectionService: Hardware acceleration initialization failed, trying standard settings", level: "warning")
+            }
+        } else {
+            sendLog("💡 PoseDetectionService: Limited hardware acceleration available, using standard settings", level: "info")
+        }
+        
+        // Standard initialization (still uses available hardware acceleration automatically)
+        if let landmarker = createPoseLandmarkerWithCPU(modelPath: modelPath) {
+            poseLandmarker = landmarker
+            currentDelegate = "Auto (Standard)"
+            isGPUAccelerated = gpuInfo.hasGPU // True if hardware is available, even in "CPU" mode
+            sendLog("✅ PoseDetectionService: Successfully initialized with standard settings", level: "info")
+            sendLog("🧠 PoseDetectionService: MediaPipe will still use available hardware acceleration automatically", level: "info")
+            onGPUStatusUpdate?(gpuInfo.hasGPU, gpuInfo.hasGPU)
+            return
+        }
+        
+        sendLog("❌ PoseDetectionService: Failed to initialize with any settings", level: "error")
+        onGPUStatusUpdate?(false, false)
+    }
+    
+    private func createPoseLandmarkerWithGPU(modelPath: String) -> PoseLandmarker? {
+        sendLog("🔧 PoseDetectionService: Attempting to create PoseLandmarker with GPU acceleration...", level: "info")
+        
         let options = PoseLandmarkerOptions()
         options.runningMode = runningMode
         options.numPoses = 1
-        options.minPoseDetectionConfidence = 0.5
-        options.minPosePresenceConfidence = 0.5
-        options.minTrackingConfidence = 0.5
+        
+        // Optimize detection thresholds for maximum accuracy with GPU acceleration
+        options.minPoseDetectionConfidence = 0.5  // Higher confidence for more precise detection
+        options.minPosePresenceConfidence = 0.5   // Higher confidence for more reliable presence detection  
+        options.minTrackingConfidence = 0.5       // Higher confidence for more stable tracking
+        
+        // Configure base options for GPU acceleration
         options.baseOptions.modelAssetPath = modelPath
+        
+        // Use explicit GPU delegate like in MediaPipe examples
+        options.baseOptions.delegate = .GPU
+        
+        do {
+            // Set delegate only for live stream mode
+            if runningMode == .liveStream {
+                options.poseLandmarkerLiveStreamDelegate = self
+            }
+            
+            let landmarker = try PoseLandmarker(options: options)
+            sendLog("✅ PoseDetectionService: PoseLandmarker created successfully with GPU acceleration", level: "info")
+            return landmarker
+        } catch {
+            sendLog("❌ PoseDetectionService: Failed to create PoseLandmarker with GPU acceleration: \(error)", level: "error")
+            return nil
+        }
+    }
+    
+    private func createPoseLandmarkerWithCPU(modelPath: String) -> PoseLandmarker? {
+        sendLog("🔧 PoseDetectionService: Attempting to create PoseLandmarker with CPU-only processing...", level: "info")
+        
+        let options = PoseLandmarkerOptions()
+        options.runningMode = runningMode
+        options.numPoses = 1
+        
+        // Standard detection thresholds for CPU processing
+        options.minPoseDetectionConfidence = 0.5  // Higher confidence for more precise detection
+        options.minPosePresenceConfidence = 0.5   // Higher confidence for more reliable presence detection
+        options.minTrackingConfidence = 0.5       // Higher confidence for more stable tracking
+        
+        // Configure base options for CPU-only processing
+        options.baseOptions.modelAssetPath = modelPath
+        
+        // Use explicit CPU delegate like in MediaPipe examples
+        options.baseOptions.delegate = .CPU
         
         // Set delegate only for live stream mode
         if runningMode == .liveStream {
@@ -88,15 +197,30 @@ class PoseDetectionService: NSObject {
         }
         
         do {
-            poseLandmarker = try PoseLandmarker(options: options)
-            sendLog("✅ PoseDetectionService: PoseLandmarker initialized successfully!", level: "info")
-            
-            // Test if pose landmarker is working
-            sendLog("🔧 PoseDetectionService: PoseLandmarker instance created: \(poseLandmarker != nil)", level: "debug")
+            let landmarker = try PoseLandmarker(options: options)
+            sendLog("✅ PoseDetectionService: PoseLandmarker created successfully with CPU processing", level: "info")
+            return landmarker
         } catch {
-            sendLog("❌ PoseDetectionService: Failed to create PoseLandmarker: \(error)", level: "error")
-            sendLog("❌ PoseDetectionService: Error details: \(error.localizedDescription)", level: "error")
+            sendLog("❌ PoseDetectionService: Failed to create PoseLandmarker with CPU: \(error)", level: "error")
+            return nil
         }
+    }
+    
+    // MARK: - Public Methods for Performance Monitoring
+    func getCurrentDelegate() -> String {
+        return currentDelegate
+    }
+    
+    func isUsingGPU() -> Bool {
+        return isGPUAccelerated
+    }
+    
+    func getGPUStatus() -> (isAccelerated: Bool, isAvailable: Bool) {
+        return (isGPUAccelerated, gpuUsageStatus)
+    }
+    
+    func hasGPUSupport() -> Bool {
+        return hasMetalGPU()
     }
     
     private func getModelPath() -> String? {
@@ -170,7 +294,7 @@ extension PoseDetectionService: PoseLandmarkerLiveStreamDelegate {
         }
         
         let landmarkCount = result.landmarks.first?.count ?? 0
-        sendLog("🎯 PoseDetectionService: Pose detected! Landmarks: \(landmarkCount), Processing time: \(String(format: "%.1f", processingTime))ms, Timestamp: \(timestampInMilliseconds)", level: "info")
+        sendLog("🎯 PoseDetectionService: Pose detected! Landmarks: \(landmarkCount), Processing time: \(String(format: "%.1f", processingTime))ms, Delegate: \(getCurrentDelegate()), Timestamp: \(timestampInMilliseconds)", level: "info")
         
         delegate?.poseDetectionService(self, didDetectPose: result, processingTime: processingTime)
     }

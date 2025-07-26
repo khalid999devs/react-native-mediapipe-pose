@@ -6,6 +6,7 @@ declare class ReactNativeMediapipePoseModule extends NativeModule<ReactNativeMed
   PI: number;
   switchCamera(viewTag: number): Promise<void>;
   requestCameraPermissions(): Promise<boolean>;
+  getGPUStatus(viewTag: number): any; // New function to get GPU status
 }
 
 // This call loads the native module object from the JSI.

@@ -34,7 +34,7 @@ class ReactNativeMediapipePoseView: ExpoView {
   private var captureSession: AVCaptureSession?
   private var previewLayer: AVCaptureVideoPreviewLayer?
   private var poseOverlayLayer: CAShapeLayer?
-  private var currentCameraType: AVCaptureDevice.Position = .back
+  private var currentCameraType: AVCaptureDevice.Position = .front
   private var videoDevice: AVCaptureDevice?
   private var videoInput: AVCaptureDeviceInput?
   private var videoOutput: AVCaptureVideoDataOutput?
@@ -57,6 +57,19 @@ class ReactNativeMediapipePoseView: ExpoView {
   
   // Pose detection
   private var isPoseDetectionEnabled = false
+  
+  // Performance optimization properties
+  private var enablePoseDataStreaming: Bool = false // Default to false for better performance
+  private var poseDataThrottleMs: Int = 100 // Throttle pose data events to reduce bridge overhead
+  private var enableDetailedLogs: Bool = false // Control detailed logging for performance
+  private var lastPoseDataSentTime: TimeInterval = 0 // Track when pose data was last sent
+  
+  // FPS optimization properties
+  private var lastReportedFPS: Double = 0 // Track last reported FPS to avoid duplicate sends
+  private var fpsChangeThreshold: Double = 2.0 // Only report FPS changes > 2 FPS
+  private var lastFPSReportTime: TimeInterval = 0 // Track when FPS was last reported
+  private var fpsReportThrottleMs: Double = 500 // Minimum 500ms between FPS reports
+  
   private var poseDetectionService: PoseDetectionService?
   private let processingQueue = DispatchQueue(label: "pose.processing", qos: .userInitiated)
   
@@ -67,6 +80,7 @@ class ReactNativeMediapipePoseView: ExpoView {
   let onDeviceCapability = EventDispatcher()
   let onPoseServiceLog = EventDispatcher()
   let onPoseServiceError = EventDispatcher()
+  let onGPUStatus = EventDispatcher() // New event for GPU/CPU status
 
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
@@ -177,6 +191,14 @@ class ReactNativeMediapipePoseView: ExpoView {
     previewLayer?.videoGravity = .resizeAspectFill
     previewLayer?.frame = bounds
     
+    // Set video orientation to match device orientation
+    if let connection = previewLayer?.connection, connection.isVideoOrientationSupported {
+      connection.videoOrientation = .portrait
+      if enableDetailedLogs {
+        print("📱 Set preview layer video orientation to portrait")
+      }
+    }
+    
     if let previewLayer = previewLayer {
       layer.addSublayer(previewLayer)
     }
@@ -195,7 +217,9 @@ class ReactNativeMediapipePoseView: ExpoView {
     
     if let poseOverlayLayer = poseOverlayLayer {
       layer.addSublayer(poseOverlayLayer)
-      print("🎨 ReactNativeMediapipePoseView: Pose overlay layer added with frame: \(bounds)")
+      if enableDetailedLogs {
+        print("🎨 ReactNativeMediapipePoseView: Pose overlay layer added with frame: \(bounds)")
+      }
     }
   }
   
@@ -210,6 +234,15 @@ class ReactNativeMediapipePoseView: ExpoView {
     
     if captureSession.canAddOutput(videoOutput!) {
       captureSession.addOutput(videoOutput!)
+      
+      // Set video orientation for output to match preview
+      if let connection = videoOutput?.connection(with: .video),
+         connection.isVideoOrientationSupported {
+        connection.videoOrientation = .portrait
+        if enableDetailedLogs {
+          print("📱 Set video output orientation to portrait")
+        }
+      }
     }
     
     // Initialize pose detection service
@@ -217,27 +250,57 @@ class ReactNativeMediapipePoseView: ExpoView {
   }
   
   private func setupPoseDetection() {
-    print("🔧 ReactNativeMediapipePoseView: Setting up pose detection service...")
+    if enableDetailedLogs {
+      print("🔧 ReactNativeMediapipePoseView: Setting up pose detection service...")
+    }
     poseDetectionService = PoseDetectionService(delegate: self)
+    
+    // Report GPU/CPU status after initialization
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+      guard let self = self, let service = self.poseDetectionService else { return }
+      
+      let isUsingGPU = service.isUsingGPU()
+      let currentDelegate = service.getCurrentDelegate()
+      
+      self.onGPUStatus([
+        "isUsingGPU": isUsingGPU,
+        "delegate": currentDelegate,
+        "deviceTier": self.deviceTier.rawValue,
+        "maxAccuracy": isUsingGPU,
+        "processingUnit": isUsingGPU ? "Neural Engine/GPU" : "CPU"
+      ])
+      
+      if enableDetailedLogs {
+        print("🚀 ReactNativeMediapipePoseView: Pose detection using \(currentDelegate) for \(isUsingGPU ? "maximum accuracy" : "compatibility")")
+      }
+    }
   }
   
   // MARK: - Pose Detection
   func enablePoseDetection(_ enabled: Bool) {
     isPoseDetectionEnabled = enabled
-    print("📹 ReactNativeMediapipePoseView: Pose detection \(enabled ? "enabled" : "disabled")")
+    if enableDetailedLogs {
+      print("📹 ReactNativeMediapipePoseView: Pose detection \(enabled ? "enabled" : "disabled")")
+    }
     
     // Clear pose overlay when disabled
     if !enabled {
       DispatchQueue.main.async {
         self.poseOverlayLayer?.path = nil
-        print("🎨 Pose overlay cleared (detection disabled)")
+        self.poseOverlayLayer?.sublayers?.forEach { $0.removeFromSuperlayer() }
+        self.poseOverlayLayer?.setNeedsDisplay()
+        if self.enableDetailedLogs {
+          print("🎨 Pose overlay cleared (detection disabled)")
+        }
       }
     }
   }
   
   func setTargetFPS(_ fps: Int) {
     targetFPS = max(1, min(fps, 60)) // Clamp between 1-60 FPS
-    print("Target FPS set to: \(targetFPS)")
+    if enableDetailedLogs {
+      print("Target FPS set to: \(targetFPS)")
+    }
   }
   
   func setAutoAdjustFPS(_ enabled: Bool) {
@@ -245,7 +308,63 @@ class ReactNativeMediapipePoseView: ExpoView {
     if !enabled {
       fpsHistory.removeAll() // Clear history when disabled
     }
-    print("Auto FPS adjustment: \(enabled ? "enabled" : "disabled")")
+    if enableDetailedLogs {
+      print("Auto FPS adjustment: \(enabled ? "enabled" : "disabled")")
+    }
+  }
+  
+  func setEnablePoseDataStreaming(_ enabled: Bool) {
+    enablePoseDataStreaming = enabled
+    if enableDetailedLogs {
+      print("Pose data streaming: \(enabled ? "enabled" : "disabled")")
+    }
+  }
+  
+  func setPoseDataThrottleMs(_ throttleMs: Int) {
+    poseDataThrottleMs = max(16, throttleMs) // Minimum 16ms (60fps)
+    if enableDetailedLogs {
+      print("Pose data throttle set to: \(poseDataThrottleMs)ms")
+    }
+  }
+  
+  func setEnableDetailedLogs(_ enabled: Bool) {
+    enableDetailedLogs = enabled
+    print("Detailed logging: \(enabled ? "enabled" : "disabled")")
+  }
+  
+  func setFPSChangeThreshold(_ threshold: Double) {
+    fpsChangeThreshold = max(0.5, threshold) // Minimum 0.5 FPS change threshold
+    if enableDetailedLogs {
+      print("FPS change threshold set to: \(fpsChangeThreshold)")
+    }
+  }
+  
+  func setFPSReportThrottleMs(_ throttleMs: Double) {
+    fpsReportThrottleMs = max(100, throttleMs) // Minimum 100ms throttle
+    if enableDetailedLogs {
+      print("FPS report throttle set to: \(fpsReportThrottleMs)ms")
+    }
+  }
+  
+  func getGPUStatus() -> [String: Any] {
+    guard let service = poseDetectionService else {
+      return [
+        "isUsingGPU": false,
+        "delegate": "Unknown",
+        "deviceTier": deviceTier.rawValue,
+        "maxAccuracy": false,
+        "processingUnit": "Unknown"
+      ]
+    }
+    
+    let isUsingGPU = service.isUsingGPU()
+    return [
+      "isUsingGPU": isUsingGPU,
+      "delegate": service.getCurrentDelegate(),
+      "deviceTier": deviceTier.rawValue,
+      "maxAccuracy": isUsingGPU,
+      "processingUnit": isUsingGPU ? "Neural Engine/GPU" : "CPU"
+    ]
   }
   
   private func shouldProcessFrame() -> Bool {
@@ -292,14 +411,23 @@ class ReactNativeMediapipePoseView: ExpoView {
         fpsHistory.removeFirst()
       }
       
-      DispatchQueue.main.async {
-        self.onFrameProcessed([
-          "fps": self.currentFPS,
-          "frameCount": self.frameCount
-        ])
+      // Only send FPS data if there's a significant change or enough time has passed
+      let timeSinceLastReport = (currentTime - lastFPSReportTime) * 1000 // Convert to ms
+      let fpsChange = abs(currentFPS - lastReportedFPS)
+      
+      if fpsChange >= fpsChangeThreshold || timeSinceLastReport >= fpsReportThrottleMs {
+        lastReportedFPS = currentFPS
+        lastFPSReportTime = currentTime
+        
+        DispatchQueue.main.async {
+          self.onFrameProcessed([
+            "fps": self.currentFPS,
+            "frameCount": self.frameCount
+          ])
+        }
       }
       
-      // Check if we need to auto-adjust FPS
+      // Check if we need to auto-adjust FPS (this always runs for internal optimization)
       checkPerformanceAndAdjust(currentTime: currentTime)
     }
   }
@@ -316,9 +444,12 @@ class ReactNativeMediapipePoseView: ExpoView {
       // If consistently dropping below 80% of target FPS, reduce target
       if fpsEfficiency < 0.8 && targetFPS > 15 {
         let newTargetFPS = max(15, targetFPS - 5)
-        print("Performance auto-adjustment: Reducing target FPS from \(targetFPS) to \(newTargetFPS)")
+        if enableDetailedLogs {
+          print("Performance auto-adjustment: Reducing target FPS from \(targetFPS) to \(newTargetFPS)")
+        }
         setTargetFPS(newTargetFPS)
         
+        // Always send auto-adjustment events as they're critical performance updates
         DispatchQueue.main.async {
           self.onFrameProcessed([
             "fps": self.currentFPS,
@@ -328,13 +459,20 @@ class ReactNativeMediapipePoseView: ExpoView {
             "reason": "Performance optimization"
           ])
         }
+        
+        // Update tracking to avoid duplicate regular FPS reports immediately after adjustment
+        self.lastReportedFPS = self.currentFPS
+        self.lastFPSReportTime = currentTime
       }
       // If consistently above 95% and below max recommended, try increasing
       else if fpsEfficiency > 0.95 && targetFPS < deviceTier.recommendedFPS {
         let newTargetFPS = min(deviceTier.recommendedFPS, targetFPS + 5)
-        print("Performance auto-adjustment: Increasing target FPS from \(targetFPS) to \(newTargetFPS)")
+        if enableDetailedLogs {
+          print("Performance auto-adjustment: Increasing target FPS from \(targetFPS) to \(newTargetFPS)")
+        }
         setTargetFPS(newTargetFPS)
         
+        // Always send auto-adjustment events as they're critical performance updates
         DispatchQueue.main.async {
           self.onFrameProcessed([
             "fps": self.currentFPS,
@@ -344,6 +482,10 @@ class ReactNativeMediapipePoseView: ExpoView {
             "reason": "Performance headroom available"
           ])
         }
+        
+        // Update tracking to avoid duplicate regular FPS reports immediately after adjustment
+        self.lastReportedFPS = self.currentFPS
+        self.lastFPSReportTime = currentTime
       }
     }
   }
@@ -443,7 +585,9 @@ extension ReactNativeMediapipePoseView: AVCaptureVideoDataOutputSampleBufferDele
     guard shouldProcessFrame() else { return }
     
     if isPoseDetectionEnabled {
-      print("📹 ReactNativeMediapipePoseView: Processing frame for pose detection...")
+      if enableDetailedLogs {
+        print("📹 ReactNativeMediapipePoseView: Processing frame for pose detection...")
+      }
       // Get current timestamp for MediaPipe
       let currentTimeMs = Int(Date().timeIntervalSince1970 * 1000)
       
@@ -465,28 +609,56 @@ extension ReactNativeMediapipePoseView: AVCaptureVideoDataOutputSampleBufferDele
 // MARK: - PoseDetectionServiceDelegate
 extension ReactNativeMediapipePoseView: PoseDetectionServiceDelegate {
   func poseDetectionService(_ service: PoseDetectionService, didDetectPose result: PoseLandmarkerResult, processingTime: Double) {
-    // Convert MediaPipe result to our format
+    // Convert MediaPipe result to our format for drawing
     let landmarks = convertPoseLandmarkerResult(result)
-    print("🎯 ReactNativeMediapipePoseView: Pose detected with \(landmarks.count) landmarks, processing time: \(String(format: "%.1f", processingTime))ms")
     
-    // Draw pose landmarks on the overlay
+    if enableDetailedLogs {
+      print("🎯 ReactNativeMediapipePoseView: Pose detected with \(landmarks.count) landmarks, processing time: \(String(format: "%.1f", processingTime))ms")
+    }
+    
+    // Always draw pose landmarks for visual feedback
     if let poseResult = result.landmarks.first {
       drawPoseLandmarks(poseResult)
     }
     
-    DispatchQueue.main.async {
-      self.onPoseDetected([
-        "landmarks": landmarks,
-        "processingTime": processingTime,
-        "timestamp": CACurrentMediaTime(),
-        "deviceTier": self.deviceTier.rawValue,
-        "confidence": result.landmarks.first?.first?.visibility?.doubleValue ?? 0.0
-      ])
+    // Only send pose data to React Native if streaming is enabled and throttle conditions are met
+    if enablePoseDataStreaming {
+      let currentTime = CACurrentMediaTime()
+      let timeSinceLastSent = (currentTime - lastPoseDataSentTime) * 1000 // Convert to milliseconds
+      
+      if timeSinceLastSent >= Double(poseDataThrottleMs) {
+        lastPoseDataSentTime = currentTime
+        
+        DispatchQueue.main.async {
+          // Send minimal essential data to reduce bridge overhead
+          var essentialData: [String: Any] = [
+            "landmarks": landmarks,
+            "processingTime": processingTime,
+            "timestamp": currentTime,
+            "confidence": result.landmarks.first?.first?.visibility?.doubleValue ?? 0.0
+          ]
+          
+          // Only include GPU status if detailed mode is enabled to reduce data size
+          if self.enableDetailedLogs {
+            let gpuStatus = self.getGPUStatus()
+            essentialData["deviceTier"] = self.deviceTier.rawValue
+            essentialData["gpuAccelerated"] = gpuStatus["isUsingGPU"] as? Bool ?? false
+            essentialData["processingUnit"] = gpuStatus["processingUnit"] as? String ?? "Unknown"
+            essentialData["delegate"] = gpuStatus["delegate"] as? String ?? "Unknown"
+          }
+          
+          self.onPoseDetected(essentialData)
+        }
+      }
     }
   }
   
   func poseDetectionService(_ service: PoseDetectionService, didFailWithError error: Error?, processingTime: Double) {
-    print("❌ ReactNativeMediapipePoseView: Pose detection failed: \(error?.localizedDescription ?? "Unknown error"), processing time: \(String(format: "%.1f", processingTime))ms")
+    if enableDetailedLogs {
+      print("❌ ReactNativeMediapipePoseView: Pose detection failed: \(error?.localizedDescription ?? "Unknown error"), processing time: \(String(format: "%.1f", processingTime))ms")
+    }
+    
+    // Always send error events as they are important
     DispatchQueue.main.async {
       self.onPoseServiceError([
         "error": error?.localizedDescription ?? "Unknown error",
@@ -496,12 +668,15 @@ extension ReactNativeMediapipePoseView: PoseDetectionServiceDelegate {
   }
   
   func poseDetectionService(_ service: PoseDetectionService, didLogMessage message: String, level: String) {
-    DispatchQueue.main.async {
-      self.onPoseServiceLog([
-        "message": message,
-        "level": level,
-        "timestamp": Date().timeIntervalSince1970
-      ])
+    // Only send log messages to React Native if detailed logging is enabled to reduce bridge overhead
+    if enableDetailedLogs {
+      DispatchQueue.main.async {
+        self.onPoseServiceLog([
+          "message": message,
+          "level": level,
+          "timestamp": Date().timeIntervalSince1970
+        ])
+      }
     }
   }
   
@@ -519,20 +694,12 @@ extension ReactNativeMediapipePoseView: PoseDetectionServiceDelegate {
   }
   
   private func drawPoseLandmarks(_ landmarks: [NormalizedLandmark]) {
-    print("🎨 ReactNativeMediapipePoseView: Drawing \(landmarks.count) landmarks")
-    
     let path = UIBezierPath()
-    let viewSize = bounds.size
+    let videoRect = getVideoPreviewRect()
     var visibleLandmarks = 0
     
-    print("🎨 View size: \(viewSize)")
-    
-    // Get the actual video preview rect to properly scale coordinates
-    let videoRect = getVideoPreviewRect()
-    print("🎨 Video preview rect: \(videoRect)")
-    
     // Draw landmarks as small circles (like MediaPipe example)
-    for (index, landmark) in landmarks.enumerated() {
+    for (_, landmark) in landmarks.enumerated() {
       let visibility = landmark.visibility?.doubleValue ?? 0.0
       if visibility > 0.5 { // Only draw visible landmarks
         visibleLandmarks += 1
@@ -544,38 +711,67 @@ extension ReactNativeMediapipePoseView: PoseDetectionServiceDelegate {
           videoRect: videoRect
         )
         
-        print("🎯 Landmark \(index): normalized(\(landmark.x), \(landmark.y)) -> screen(\(transformedPoint.x), \(transformedPoint.y)) visibility: \(visibility)")
-        
-        // Draw small filled circles for landmarks (like MediaPipe example)
-        let circle = UIBezierPath(arcCenter: transformedPoint, radius: 4, startAngle: 0, endAngle: .pi * 2, clockwise: true)
+        // Draw small circles for landmarks
+        let circle = UIBezierPath(arcCenter: transformedPoint, radius: 3, startAngle: 0, endAngle: .pi * 2, clockwise: true)
         path.append(circle)
       }
     }
     
-    print("🎨 Drawing \(visibleLandmarks) visible landmarks")
+    if enableDetailedLogs {
+      print("🎯 Drawing \(visibleLandmarks) visible landmarks")
+    }
     
     // Draw pose connections (skeleton)
     drawPoseConnections(landmarks, path: path, videoRect: videoRect)
     
     DispatchQueue.main.async {
-      self.poseOverlayLayer?.path = path.cgPath
-      self.poseOverlayLayer?.strokeColor = UIColor.cyan.cgColor
-      self.poseOverlayLayer?.fillColor = UIColor.cyan.cgColor  // Fill for landmark circles
-      self.poseOverlayLayer?.lineWidth = 2.0  // Match MediaPipe example
-      print("🎨 Pose path updated on main thread")
+      // Clear previous content
+      self.poseOverlayLayer?.path = nil
+      self.poseOverlayLayer?.sublayers?.forEach { $0.removeFromSuperlayer() }
+      
+      // Create connection layer (skeleton) with green thin lines
+      let connectionLayer = CAShapeLayer()
+      let connectionPath = UIBezierPath()
+      self.drawPoseConnections(landmarks, path: connectionPath, videoRect: videoRect)
+      
+      connectionLayer.path = connectionPath.cgPath
+      connectionLayer.strokeColor = UIColor.systemGreen.cgColor // Green skeleton
+      connectionLayer.fillColor = UIColor.clear.cgColor
+      connectionLayer.lineWidth = 0.5 // Much thinner lines
+      connectionLayer.lineJoin = .round
+      connectionLayer.lineCap = .round
+      connectionLayer.opacity = 0.8
+      
+      // Create landmark layer (dots) with orange circles
+      let landmarkLayer = CAShapeLayer()
+      landmarkLayer.path = path.cgPath
+      landmarkLayer.fillColor = UIColor.systemOrange.cgColor // Orange dots
+      landmarkLayer.strokeColor = UIColor.white.cgColor // White border
+      landmarkLayer.lineWidth = 1.5
+      landmarkLayer.opacity = 0.9
+      
+      // Add both layers
+      if let poseOverlay = self.poseOverlayLayer {
+        poseOverlay.addSublayer(connectionLayer)
+        poseOverlay.addSublayer(landmarkLayer)
+      }
     }
   }
   
   private func transformNormalizedPoint(x: Float, y: Float, videoRect: CGRect) -> CGPoint {
+    // MediaPipe normalized coordinates are in range [0, 1]
+    // x: 0 = left, 1 = right
+    // y: 0 = top, 1 = bottom
+    
     var transformedX = CGFloat(x)
-    var transformedY = CGFloat(y)
+    let transformedY = CGFloat(y)
     
     // Mirror horizontally for front camera (selfie mode)
     if currentCameraType == .front {
       transformedX = 1.0 - transformedX
     }
     
-    // Convert to screen coordinates within video rect
+    // Convert normalized coordinates to view coordinates
     let screenX = videoRect.origin.x + transformedX * videoRect.width
     let screenY = videoRect.origin.y + transformedY * videoRect.height
     
@@ -584,24 +780,47 @@ extension ReactNativeMediapipePoseView: PoseDetectionServiceDelegate {
   
   private func getVideoPreviewRect() -> CGRect {
     guard let previewLayer = previewLayer else {
-      return bounds // Fallback to full bounds
+      return bounds
     }
     
-    // Calculate the actual video preview area within the layer
-    // This accounts for aspect ratio scaling
+    // Get the actual video preview rect within the layer bounds
     let layerBounds = previewLayer.bounds
-    let videoGravity = previewLayer.videoGravity
     
-    if videoGravity == .resizeAspectFill {
-      // For aspect fill, the video covers the entire bounds
+    // For most camera setups with ResizeAspectFill, the video covers the entire bounds
+    // but we need to account for the actual camera resolution vs display resolution
+    
+    if previewLayer.videoGravity == .resizeAspectFill {
+      // Video fills entire preview area, may be cropped
       return layerBounds
-    } else if videoGravity == .resizeAspect {
-      // For aspect fit, we need to calculate the actual video rect
-      // This is more complex and would require video dimensions
-      // For now, use full bounds as approximation
-      return layerBounds
+    } else if previewLayer.videoGravity == .resizeAspect {
+      // Video fits within preview area with black bars
+      // We need to calculate the actual video rect
+      guard let _ = previewLayer.connection,
+            let input = captureSession?.inputs.first as? AVCaptureDeviceInput else {
+        return layerBounds
+      }
+      
+      // Get video dimensions
+      let videoSize = input.device.activeFormat.formatDescription.dimensions
+      let videoAspectRatio = CGFloat(videoSize.width) / CGFloat(videoSize.height)
+      let layerAspectRatio = layerBounds.width / layerBounds.height
+      
+      var videoRect: CGRect
+      if videoAspectRatio > layerAspectRatio {
+        // Video is wider, fit by height
+        let scaledWidth = layerBounds.height * videoAspectRatio
+        let xOffset = (layerBounds.width - scaledWidth) / 2
+        videoRect = CGRect(x: xOffset, y: 0, width: scaledWidth, height: layerBounds.height)
+      } else {
+        // Video is taller, fit by width
+        let scaledHeight = layerBounds.width / videoAspectRatio
+        let yOffset = (layerBounds.height - scaledHeight) / 2
+        videoRect = CGRect(x: 0, y: yOffset, width: layerBounds.width, height: scaledHeight)
+      }
+      
+      return videoRect
     } else {
-      // For resize (stretch), use full bounds
+      // ResizeResize (stretch) - use full bounds
       return layerBounds
     }
   }
@@ -664,6 +883,8 @@ extension ReactNativeMediapipePoseView: PoseDetectionServiceDelegate {
       }
     }
     
-    print("🦴 Drew \(connectionsDrawn) pose connections")
+    if enableDetailedLogs {
+      print("🦴 Drew \(connectionsDrawn) pose connections")
+    }
   }
 }

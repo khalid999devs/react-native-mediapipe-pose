@@ -60,12 +60,12 @@ const POSE_LANDMARK_NAMES = [
 ];
 
 export default function CameraExample() {
-  const [cameraType, setCameraType] = useState<CameraType>('back');
+  const [cameraType, setCameraType] = useState<CameraType>('front');
   const [permissionStatus, setPermissionStatus] = useState<string>('unknown');
   const [cameraReady, setCameraReady] = useState<boolean>(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [isPoseDetectionEnabled, setIsPoseDetectionEnabled] =
-    useState<boolean>(true); // Enable by default for testing
+    useState<boolean>(false); // Disabled by default
   const [fps, setFps] = useState<number>(0);
   const [poseCount, setPoseCount] = useState<number>(0);
   const [processingTime, setProcessingTime] = useState<number>(0);
@@ -77,11 +77,28 @@ export default function CameraExample() {
   const [lastAutoAdjustment, setLastAutoAdjustment] = useState<string | null>(
     null
   );
+
+  // Performance optimization controls
+  const [enablePoseDataStreaming, setEnablePoseDataStreaming] =
+    useState<boolean>(false); // Disabled by default for performance
+  const [poseDataThrottleMs, setPoseDataThrottleMs] = useState<number>(100); // 100ms throttle default
+  const [enableDetailedLogs, setEnableDetailedLogs] = useState<boolean>(false); // Disabled by default for performance
+  const [fpsChangeThreshold, setFpsChangeThreshold] = useState<number>(2.0); // 2 FPS change threshold
+  const [fpsReportThrottleMs, setFpsReportThrottleMs] = useState<number>(500); // 500ms FPS report throttle
+  const [showPerformanceControls, setShowPerformanceControls] =
+    useState<boolean>(false); // Performance controls visibility
+
   const [poseServiceLogs, setPoseServiceLogs] = useState<string[]>([]);
   const [lastPoseServiceError, setLastPoseServiceError] = useState<
     string | null
   >(null);
   const [showDebugLogs, setShowDebugLogs] = useState<boolean>(false);
+  const [gpuStatus, setGpuStatus] = useState<{
+    isUsingGPU: boolean;
+    delegate: string;
+    processingUnit: string;
+    deviceTier: string;
+  } | null>(null);
 
   useEffect(() => {
     // Request permissions on component mount
@@ -249,6 +266,29 @@ export default function CameraExample() {
     setTargetFPS(capability.recommendedFPS); // Set recommended FPS automatically
   };
 
+  const handleGPUStatus = ({
+    nativeEvent: status,
+  }: {
+    nativeEvent: {
+      isUsingGPU: boolean;
+      delegate: string;
+      processingUnit: string;
+      deviceTier: string;
+    };
+  }) => {
+    console.log('🚀 GPU Status detected:', status);
+    setGpuStatus(status);
+
+    // Show an alert about the acceleration status
+    const accelerationType = status.isUsingGPU ? 'GPU/Neural Engine' : 'CPU';
+    const performanceLevel = status.isUsingGPU
+      ? 'Maximum Accuracy'
+      : 'Standard';
+    console.log(
+      `🎯 Pose detection running on ${accelerationType} for ${performanceLevel}`
+    );
+  };
+
   const adjustFPS = (newFPS: number) => {
     const clampedFPS = Math.max(5, Math.min(60, newFPS));
     setTargetFPS(clampedFPS);
@@ -256,6 +296,10 @@ export default function CameraExample() {
 
   const toggleFPSControls = () => {
     setShowFPSControls(!showFPSControls);
+  };
+
+  const togglePerformanceControls = () => {
+    setShowPerformanceControls(!showPerformanceControls);
   };
 
   const handlePoseServiceLog = ({
@@ -314,6 +358,11 @@ export default function CameraExample() {
         style={styles.camera}
         cameraType={cameraType}
         enablePoseDetection={isPoseDetectionEnabled}
+        enablePoseDataStreaming={enablePoseDataStreaming}
+        poseDataThrottleMs={poseDataThrottleMs}
+        enableDetailedLogs={enableDetailedLogs}
+        fpsChangeThreshold={fpsChangeThreshold}
+        fpsReportThrottleMs={fpsReportThrottleMs}
         targetFPS={targetFPS}
         autoAdjustFPS={autoAdjustFPS}
         onCameraReady={handleCameraReady}
@@ -323,6 +372,7 @@ export default function CameraExample() {
         onDeviceCapability={handleDeviceCapability}
         onPoseServiceLog={handlePoseServiceLog}
         onPoseServiceError={handlePoseServiceError}
+        onGPUStatus={handleGPUStatus}
       />
 
       {/* Camera Not Ready Overlay */}
@@ -387,6 +437,21 @@ export default function CameraExample() {
               </View>
             )}
 
+            {/* GPU Status */}
+            {gpuStatus && (
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>Processing</Text>
+                <Text
+                  style={[
+                    styles.statValue,
+                    { color: gpuStatus.isUsingGPU ? '#4CAF50' : '#FF9800' },
+                  ]}
+                >
+                  {gpuStatus.isUsingGPU ? '🚀 GPU' : '🔄 CPU'}
+                </Text>
+              </View>
+            )}
+
             {isPoseDetectionEnabled && (
               <>
                 <View style={styles.statItem}>
@@ -442,6 +507,81 @@ export default function CameraExample() {
                   {deviceCapability.physicalMemoryGB.toFixed(1)}GB RAM
                 </Text>
               )}
+            </View>
+          )}
+
+          {/* Performance Controls */}
+          {showPerformanceControls && (
+            <View style={styles.fpsControls}>
+              <Text style={styles.fpsControlsTitle}>
+                ⚡ Performance Optimization
+              </Text>
+
+              {/* Pose Data Streaming Toggle */}
+              <View style={styles.autoAdjustContainer}>
+                <Text style={styles.autoAdjustLabel}>Stream Pose Data:</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.toggleButton,
+                    enablePoseDataStreaming && styles.toggleButtonActive,
+                  ]}
+                  onPress={() =>
+                    setEnablePoseDataStreaming(!enablePoseDataStreaming)
+                  }
+                >
+                  <Text style={styles.toggleButtonText}>
+                    {enablePoseDataStreaming ? 'ON' : 'OFF'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Detailed Logs Toggle */}
+              <View style={styles.autoAdjustContainer}>
+                <Text style={styles.autoAdjustLabel}>Detailed Logs:</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.toggleButton,
+                    enableDetailedLogs && styles.toggleButtonActive,
+                  ]}
+                  onPress={() => setEnableDetailedLogs(!enableDetailedLogs)}
+                >
+                  <Text style={styles.toggleButtonText}>
+                    {enableDetailedLogs ? 'ON' : 'OFF'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Throttle Controls (only when streaming is enabled) */}
+              {enablePoseDataStreaming && (
+                <View>
+                  <Text style={styles.autoAdjustLabel}>
+                    Data Throttle (ms):
+                  </Text>
+                  <View style={styles.fpsButtons}>
+                    {[50, 100, 200].map((throttleValue) => (
+                      <TouchableOpacity
+                        key={throttleValue}
+                        style={[
+                          styles.fpsButton,
+                          poseDataThrottleMs === throttleValue &&
+                            styles.fpsButtonActive,
+                        ]}
+                        onPress={() => setPoseDataThrottleMs(throttleValue)}
+                      >
+                        <Text style={styles.fpsButtonText}>
+                          {throttleValue}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              <Text style={styles.deviceInfo}>
+                💡 Disable streaming for maximum performance
+                {enablePoseDataStreaming &&
+                  ` • Throttle: ${poseDataThrottleMs}ms`}
+              </Text>
             </View>
           )}
 
@@ -502,6 +642,14 @@ export default function CameraExample() {
           >
             <Text style={styles.controlButtonText}>⚙️</Text>
             <Text style={styles.controlButtonLabel}>FPS</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.controlButton}
+            onPress={togglePerformanceControls}
+          >
+            <Text style={styles.controlButtonText}>🚀</Text>
+            <Text style={styles.controlButtonLabel}>Perf</Text>
           </TouchableOpacity>
         </View>
       )}
