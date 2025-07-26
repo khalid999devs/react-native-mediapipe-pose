@@ -9,6 +9,7 @@ import {
   Dimensions,
   Platform,
   ScrollView,
+  FlatList,
 } from 'react-native';
 import ReactNativeMediapipePose, {
   ReactNativeMediapipePoseView,
@@ -61,14 +62,14 @@ const POSE_LANDMARK_NAMES = [
 ];
 
 /**
- * Enterprise-level Camera Example for React Native MediaPipe Pose Detection
+ * Camera Example for React Native MediaPipe Pose Detection
  *
  * Features:
  * - Production-ready pose detection with GPU acceleration
  * - Performance optimization controls
- * - Enterprise-level logging configuration
  * - Device capability detection and auto-adjustment
  * - Optimized for maximum accuracy and performance
+ * - Advanced logging configuration
  */
 export default function CameraExample() {
   // Core camera state
@@ -118,6 +119,9 @@ export default function CameraExample() {
     processingUnit: string;
     deviceTier: string;
   } | null>(null);
+
+  // Live logs for floating modal
+  const [liveLogs, setLiveLogs] = useState<string[]>([]);
 
   /**
    * Detect current JavaScript engine for performance monitoring
@@ -254,9 +258,14 @@ export default function CameraExample() {
     // Enterprise logging - only when detailed logs are enabled
     if (enableDetailedLogs) {
       const visibleLandmarks = landmarks.filter((l) => l.visibility > 0.5);
-      console.log(
-        `Pose detected: ${landmarks.length} landmarks (${visibleLandmarks.length} visible), ${procTime}ms`
-      );
+      const logMessage = `Pose detected: ${landmarks.length} landmarks (${visibleLandmarks.length} visible), ${procTime}ms`;
+      console.log(logMessage);
+
+      // Add to live logs for floating modal
+      setLiveLogs((prev) => [
+        ...prev.slice(-19),
+        `${new Date().toLocaleTimeString()}: ${logMessage}`,
+      ]);
     }
   };
 
@@ -300,9 +309,14 @@ export default function CameraExample() {
 
     // Enterprise logging - only essential GPU status
     if (enableDetailedLogs) {
-      console.log(
-        `GPU Status: ${status.isUsingGPU ? 'GPU' : 'CPU'} processing on ${status.deviceTier} tier device`
-      );
+      const logMessage = `GPU Status: ${status.isUsingGPU ? 'GPU' : 'CPU'} processing on ${status.deviceTier} tier device`;
+      console.log(logMessage);
+
+      // Add to live logs for floating modal
+      setLiveLogs((prev) => [
+        ...prev.slice(-19),
+        `${new Date().toLocaleTimeString()}: ${logMessage}`,
+      ]);
     }
   };
 
@@ -323,9 +337,13 @@ export default function CameraExample() {
     nativeEvent: { message: string; level: string; timestamp: number };
   }) => {
     if (enableDetailedLogs) {
-      setPoseServiceLogs((prev) => [
-        ...prev.slice(-49),
-        `[${new Date(timestamp * 1000).toLocaleTimeString()}] ${message}`,
+      const logEntry = `[${new Date(timestamp * 1000).toLocaleTimeString()}] ${message}`;
+      setPoseServiceLogs((prev) => [...prev.slice(-49), logEntry]);
+
+      // Add to live logs for floating modal
+      setLiveLogs((prev) => [
+        ...prev.slice(-19),
+        `${new Date().toLocaleTimeString()}: Service - ${message}`,
       ]);
     }
   };
@@ -338,8 +356,17 @@ export default function CameraExample() {
   }: {
     nativeEvent: { error: string; processingTime: number };
   }) => {
-    setLastPoseServiceError(`${error} (${processingTime}ms)`);
+    const errorMessage = `${error} (${processingTime}ms)`;
+    setLastPoseServiceError(errorMessage);
     setTimeout(() => setLastPoseServiceError(null), 5000);
+
+    // Add to live logs for floating modal
+    if (enableDetailedLogs) {
+      setLiveLogs((prev) => [
+        ...prev.slice(-19),
+        `${new Date().toLocaleTimeString()}: ERROR - ${errorMessage}`,
+      ]);
+    }
   };
 
   // Modal handlers optimized for performance
@@ -349,6 +376,15 @@ export default function CameraExample() {
     setLastPoseServiceError(null);
     setShowDebugLogs(false);
   }, []);
+
+  /**
+   * Clear live logs
+   */
+  useEffect(() => {
+    if (!enableDetailedLogs) {
+      setLiveLogs([]);
+    }
+  }, [enableDetailedLogs]);
 
   /**
    * UI control toggles
@@ -639,6 +675,30 @@ export default function CameraExample() {
           {lastAutoAdjustment && (
             <View style={styles.autoAdjustNotification}>
               <Text style={styles.autoAdjustText}>🤖 {lastAutoAdjustment}</Text>
+            </View>
+          )}
+
+          {/* Floating Live Logs Modal */}
+          {enableDetailedLogs && liveLogs.length > 0 && (
+            <View style={styles.floatingLogsModal}>
+              <View style={styles.floatingLogsHeader}>
+                <Text style={styles.floatingLogsTitle}>
+                  🔍 Live Logs ({liveLogs.length})
+                </Text>
+                <TouchableOpacity
+                  style={styles.floatingLogsClearButton}
+                  onPress={() => setLiveLogs([])}
+                >
+                  <Text style={styles.floatingLogsClearText}>Clear</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.floatingLogsScrollView}>
+                {liveLogs.slice(-5).map((log, idx) => (
+                  <Text key={idx} style={styles.floatingLogText}>
+                    {log}
+                  </Text>
+                ))}
+              </View>
             </View>
           )}
         </View>
@@ -1105,5 +1165,51 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     marginBottom: 3,
     lineHeight: 14,
+  },
+  // Floating Live Logs Modal Styles
+  floatingLogsModal: {
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    borderRadius: 12,
+    marginTop: 10,
+    maxHeight: 200,
+    borderWidth: 1,
+    borderColor: 'rgba(76, 175, 80, 0.3)',
+  },
+  floatingLogsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  floatingLogsTitle: {
+    color: '#4CAF50',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  floatingLogsClearButton: {
+    backgroundColor: 'rgba(255, 152, 0, 0.8)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  floatingLogsClearText: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  floatingLogsScrollView: {
+    maxHeight: 190,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  floatingLogText: {
+    color: '#E0E0E0',
+    fontSize: 10,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    marginBottom: 2,
+    lineHeight: 12,
   },
 });

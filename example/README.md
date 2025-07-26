@@ -1,10 +1,10 @@
 # React Native MediaPipe Pose - Example App
 
-This example demonstrates the enterprise-level implementation of React Native MediaPipe Pose detection with GPU acceleration and performance optimization.
+This example demonstrates the implementation of React Native MediaPipe Pose detection with GPU acceleration and performance optimization.
 
 ## Features
 
-- ✨ **Production-Ready**: Optimized for enterprise deployment
+- ✨ **Production-Ready**: Optimized for production deployment
 - 🚀 **GPU Acceleration**: Automatic GPU/CPU detection with Metal framework
 - 📊 **Performance Monitoring**: Real-time FPS tracking and device capability detection
 - ⚡ **Optimization Controls**: Configurable pose data streaming and logging levels
@@ -23,7 +23,7 @@ npx expo run:ios
 
 ### Essential Controls
 
-The example includes enterprise-level performance controls:
+The example includes advanced performance controls:
 
 - **Pose Data Streaming**: Disable for maximum performance (default: OFF)
 - **Detailed Logs**: Enable only for debugging (default: OFF)
@@ -56,7 +56,7 @@ import { ReactNativeMediapipePoseView } from 'react-native-mediapipe-pose';
 />
 ```
 
-## Enterprise Configuration
+## Production Configuration
 
 For production deployment, ensure these settings:
 
@@ -75,7 +75,7 @@ const productionConfig = {
 - **Swift Module**: Optimized MediaPipe integration with Metal GPU detection
 - **Performance Service**: Minimal overhead pose detection with 0.5 confidence
 - **Bridge Communication**: Throttled data transmission for efficiency
-- **Error Handling**: Enterprise-level error reporting and recovery
+- **Error Handling**: Comprehensive error reporting and recovery
 
 ## Testing
 

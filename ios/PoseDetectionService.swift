@@ -1,5 +1,5 @@
 /**
- * Enterprise-grade pose detection service using MediaPipe BlazePose
+ * Pose detection service using MediaPipe BlazePose
  * Provides GPU-accelerated pose landmark detection with automatic fallback to CPU
  */
 

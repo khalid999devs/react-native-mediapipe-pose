@@ -3,7 +3,7 @@ import AVFoundation
 
 /**
  * ReactNativeMediapipePoseModule
- * Enterprise-grade React Native module for real-time pose detection using MediaPipe
+ * React Native module for real-time pose detection using MediaPipe
  * Provides camera control, GPU acceleration, and performance optimization
  */
 public class ReactNativeMediapipePoseModule: Module {

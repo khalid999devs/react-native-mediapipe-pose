@@ -31,7 +31,7 @@ declare class ReactNativeMediapipePoseModule extends NativeModule<ReactNativeMed
 
 /**
  * React Native MediaPipe Pose Detection Module
- * Enterprise-grade pose detection with GPU acceleration and performance optimization
+ * Pose detection with GPU acceleration and performance optimization
  */
 export default requireNativeModule<ReactNativeMediapipePoseModule>(
   'ReactNativeMediapipePose'

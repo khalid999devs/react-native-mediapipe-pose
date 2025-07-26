@@ -1,7 +1,7 @@
 {
   "name": "react-native-mediapipe-pose",
   "version": "1.0.0",
-  "description": "Enterprise-level React Native MediaPipe Pose Detection with GPU acceleration and maximum accuracy",
+  "description": "React Native MediaPipe Pose Detection with GPU acceleration and high accuracy",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "scripts": {
@@ -22,7 +22,6 @@
     "pose-detection",
     "computer-vision",
     "gpu-acceleration",
-    "enterprise",
     "performance",
     "machine-learning",
     "computer-vision",
