@@ -1,13 +1,24 @@
 {
   "name": "react-native-mediapipe-pose-example",
   "version": "1.0.0",
+  "description": "Enterprise-level example app demonstrating React Native MediaPipe Pose Detection",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build:ios": "expo build:ios",
+    "build:android": "expo build:android"
   },
+  "keywords": [
+    "mediapipe",
+    "pose-detection",
+    "react-native",
+    "expo",
+    "computer-vision",
+    "enterprise"
+  ],
   "dependencies": {
     "expo": "~53.0.20",
     "react": "19.0.0",

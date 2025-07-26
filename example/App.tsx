@@ -1,32 +1,15 @@
 import React from 'react';
 import CameraExample from './CameraExample';
 
+/**
+ * Enterprise-level React Native MediaPipe Pose Detection Example
+ *
+ * This app demonstrates production-ready pose detection with:
+ * - GPU acceleration and device optimization
+ * - Performance monitoring and auto-adjustment
+ * - Enterprise logging controls
+ * - Maximum accuracy configuration (0.5 confidence threshold)
+ */
 export default function App() {
   return <CameraExample />;
 }
-
-const styles = {
-  header: {
-    fontSize: 30,
-    margin: 20,
-  },
-  groupHeader: {
-    fontSize: 20,
-    marginBottom: 20,
-  },
-  group: {
-    margin: 20,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 20,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#eee',
-  },
-  cameraView: {
-    height: 300,
-    backgroundColor: '#000',
-    borderRadius: 10,
-  },
-};

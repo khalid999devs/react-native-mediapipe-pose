@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
-  Button,
   Text,
   StyleSheet,
   Alert,
-  SafeAreaView,
   TouchableOpacity,
   StatusBar,
   Dimensions,
@@ -22,7 +20,10 @@ import ReactNativeMediapipePose, {
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-// MediaPipe BlazePose landmark names for debugging
+/**
+ * MediaPipe BlazePose landmark names for development and debugging
+ * Reference: https://developers.google.com/mediapipe/solutions/vision/pose_landmarker
+ */
 const POSE_LANDMARK_NAMES = [
   'nose',
   'left_eye_inner',
@@ -59,40 +60,58 @@ const POSE_LANDMARK_NAMES = [
   'right_foot_index',
 ];
 
+/**
+ * Enterprise-level Camera Example for React Native MediaPipe Pose Detection
+ *
+ * Features:
+ * - Production-ready pose detection with GPU acceleration
+ * - Performance optimization controls
+ * - Enterprise-level logging configuration
+ * - Device capability detection and auto-adjustment
+ * - Optimized for maximum accuracy and performance
+ */
 export default function CameraExample() {
+  // Core camera state
   const [cameraType, setCameraType] = useState<CameraType>('front');
   const [permissionStatus, setPermissionStatus] = useState<string>('unknown');
   const [cameraReady, setCameraReady] = useState<boolean>(false);
   const [lastError, setLastError] = useState<string | null>(null);
+
+  // Pose detection state
   const [isPoseDetectionEnabled, setIsPoseDetectionEnabled] =
-    useState<boolean>(false); // Disabled by default
-  const [fps, setFps] = useState<number>(0);
+    useState<boolean>(false);
   const [poseCount, setPoseCount] = useState<number>(0);
   const [processingTime, setProcessingTime] = useState<number>(0);
+
+  // Performance monitoring
+  const [fps, setFps] = useState<number>(0);
   const [deviceCapability, setDeviceCapability] =
     useState<DeviceCapability | null>(null);
   const [targetFPS, setTargetFPS] = useState<number>(30);
-  const [showFPSControls, setShowFPSControls] = useState<boolean>(false);
   const [autoAdjustFPS, setAutoAdjustFPS] = useState<boolean>(true);
   const [lastAutoAdjustment, setLastAutoAdjustment] = useState<string | null>(
     null
   );
 
-  // Performance optimization controls
+  // Enterprise performance optimization controls
   const [enablePoseDataStreaming, setEnablePoseDataStreaming] =
-    useState<boolean>(false); // Disabled by default for performance
-  const [poseDataThrottleMs, setPoseDataThrottleMs] = useState<number>(100); // 100ms throttle default
-  const [enableDetailedLogs, setEnableDetailedLogs] = useState<boolean>(false); // Disabled by default for performance
-  const [fpsChangeThreshold, setFpsChangeThreshold] = useState<number>(2.0); // 2 FPS change threshold
-  const [fpsReportThrottleMs, setFpsReportThrottleMs] = useState<number>(500); // 500ms FPS report throttle
-  const [showPerformanceControls, setShowPerformanceControls] =
-    useState<boolean>(false); // Performance controls visibility
+    useState<boolean>(false);
+  const [poseDataThrottleMs, setPoseDataThrottleMs] = useState<number>(100);
+  const [enableDetailedLogs, setEnableDetailedLogs] = useState<boolean>(false);
+  const [fpsChangeThreshold, setFpsChangeThreshold] = useState<number>(2.0);
+  const [fpsReportThrottleMs, setFpsReportThrottleMs] = useState<number>(500);
 
+  // UI state
+  const [showFPSControls, setShowFPSControls] = useState<boolean>(false);
+  const [showPerformanceControls, setShowPerformanceControls] =
+    useState<boolean>(false);
+  const [showDebugLogs, setShowDebugLogs] = useState<boolean>(false);
+
+  // Debug state (enterprise-controlled)
   const [poseServiceLogs, setPoseServiceLogs] = useState<string[]>([]);
   const [lastPoseServiceError, setLastPoseServiceError] = useState<
     string | null
   >(null);
-  const [showDebugLogs, setShowDebugLogs] = useState<boolean>(false);
   const [gpuStatus, setGpuStatus] = useState<{
     isUsingGPU: boolean;
     delegate: string;
@@ -100,11 +119,48 @@ export default function CameraExample() {
     deviceTier: string;
   } | null>(null);
 
+  /**
+   * Detect current JavaScript engine for performance monitoring
+   */
+  const getJSEngine = (): string => {
+    try {
+      // Type assertion for global object with engine-specific properties
+      const globalObj = global as any;
+
+      // Hermes detection
+      if (globalObj.HermesInternal) {
+        return 'Hermes';
+      }
+
+      // JSC (JavaScriptCore) detection
+      if (globalObj._scriptURL || globalObj.__fbBatchedBridge) {
+        return 'JSC';
+      }
+
+      // V8 detection (for debug builds or other engines)
+      if (globalObj.v8 || globalObj.chrome) {
+        return 'V8';
+      }
+
+      // Fallback engine detection via user agent
+      if (typeof navigator !== 'undefined' && navigator.userAgent) {
+        if (navigator.userAgent.includes('Hermes')) return 'Hermes';
+        if (navigator.userAgent.includes('V8')) return 'V8';
+      }
+
+      return 'Unknown';
+    } catch (error) {
+      return 'Unknown';
+    }
+  };
+
   useEffect(() => {
-    // Request permissions on component mount
     requestPermissions();
   }, []);
 
+  /**
+   * Request camera permissions with proper error handling
+   */
   const requestPermissions = async () => {
     try {
       setPermissionStatus('requesting...');
@@ -118,41 +174,42 @@ export default function CameraExample() {
         );
       }
     } catch (error) {
-      console.error('Error requesting camera permissions:', error);
       setPermissionStatus('error');
       Alert.alert('Error', 'Failed to request camera permissions');
     }
   };
 
+  /**
+   * Switch between front and back camera
+   */
   const switchCamera = () => {
-    setCameraType((current) => {
-      const newType = current === 'back' ? 'front' : 'back';
-      console.log(`Switching camera from ${current} to ${newType}`);
-      return newType;
-    });
+    setCameraType((current) => (current === 'back' ? 'front' : 'back'));
   };
 
+  /**
+   * Handle camera ready state
+   */
   const handleCameraReady = ({
     nativeEvent: { ready },
   }: {
     nativeEvent: { ready: boolean };
   }) => {
-    console.log('Camera ready:', ready);
     setCameraReady(ready);
     if (ready) {
-      setLastError(null); // Clear any previous errors
+      setLastError(null);
     }
   };
 
+  /**
+   * Handle camera errors with enterprise-level error reporting
+   */
   const handleCameraError = ({
     nativeEvent: { error },
   }: {
     nativeEvent: { error: string };
   }) => {
-    console.error('Camera error:', error);
     setLastError(error);
 
-    // Check if it's a simulator-related error
     if (error.includes('Simulator') || error.includes('simulator')) {
       Alert.alert(
         'iOS Simulator Limitation',
@@ -166,6 +223,9 @@ export default function CameraExample() {
     setCameraReady(false);
   };
 
+  /**
+   * Handle frame processing updates and FPS monitoring
+   */
   const handleFrameProcessed = ({
     nativeEvent: { fps: currentFps, autoAdjusted, newTargetFPS, reason },
   }: {
@@ -173,99 +233,59 @@ export default function CameraExample() {
   }) => {
     setFps(Math.round(currentFps));
 
-    // Handle auto-adjustment notifications
     if (autoAdjusted && newTargetFPS && reason) {
       setTargetFPS(newTargetFPS);
       setLastAutoAdjustment(`Auto-adjusted to ${newTargetFPS} FPS: ${reason}`);
-
-      // Clear notification after 3 seconds
       setTimeout(() => setLastAutoAdjustment(null), 3000);
     }
   };
 
+  /**
+   * Handle pose detection results with enterprise logging
+   */
   const handlePoseDetected = ({
     nativeEvent: { landmarks, processingTime: procTime },
   }: {
     nativeEvent: PoseDetectionResult;
   }) => {
     setPoseCount((prev) => prev + 1);
-    setProcessingTime(Math.round(procTime * 100) / 100); // Round to 2 decimal places
+    setProcessingTime(Math.round(procTime * 100) / 100);
 
-    // Log pose data (you can use this for debugging)
-    console.log(
-      `🎯 Pose detected with ${landmarks.length} landmarks, processing time: ${procTime}ms`
-    );
-
-    // Print detected keypoints for debugging
-    console.log('📍 Detected Keypoints:');
-    landmarks.forEach((landmark, index) => {
-      const { x, y, z, visibility } = landmark;
-      const landmarkName = POSE_LANDMARK_NAMES[index] || `landmark_${index}`;
-      if (visibility > 0.5) {
-        // Only log visible landmarks
-        console.log(
-          `  ${landmarkName} (${index}): x=${x.toFixed(3)}, y=${y.toFixed(3)}, z=${z.toFixed(3)}, visibility=${visibility.toFixed(3)}`
-        );
-      }
-    });
-
-    // Log visible landmarks count
-    const visibleLandmarks = landmarks.filter((l) => l.visibility > 0.5);
-    console.log(
-      `👁️ Visible landmarks: ${visibleLandmarks.length}/${landmarks.length}`
-    );
-
-    // Log key body parts for quick reference
-    const keyLandmarks = [
-      { name: 'nose', index: 0 },
-      { name: 'left_shoulder', index: 11 },
-      { name: 'right_shoulder', index: 12 },
-      { name: 'left_elbow', index: 13 },
-      { name: 'right_elbow', index: 14 },
-      { name: 'left_wrist', index: 15 },
-      { name: 'right_wrist', index: 16 },
-      { name: 'left_hip', index: 23 },
-      { name: 'right_hip', index: 24 },
-      { name: 'left_knee', index: 25 },
-      { name: 'right_knee', index: 26 },
-      { name: 'left_ankle', index: 27 },
-      { name: 'right_ankle', index: 28 },
-    ];
-
-    console.log('🦴 Key Body Parts:');
-    keyLandmarks.forEach(({ name, index }) => {
-      if (index < landmarks.length) {
-        const landmark = landmarks[index];
-        if (landmark.visibility > 0.5) {
-          console.log(
-            `  ${name}: (${landmark.x.toFixed(2)}, ${landmark.y.toFixed(2)}) visibility: ${landmark.visibility.toFixed(2)}`
-          );
-        }
-      }
-    });
-  };
-
-  const togglePoseDetection = () => {
-    const newState = !isPoseDetectionEnabled;
-    setIsPoseDetectionEnabled(newState);
-    console.log(
-      `🎯 Pose detection toggled: ${newState ? 'ENABLED' : 'DISABLED'}`
-    );
-    if (newState) {
-      setPoseCount(0); // Reset counter when enabling
+    // Enterprise logging - only when detailed logs are enabled
+    if (enableDetailedLogs) {
+      const visibleLandmarks = landmarks.filter((l) => l.visibility > 0.5);
+      console.log(
+        `Pose detected: ${landmarks.length} landmarks (${visibleLandmarks.length} visible), ${procTime}ms`
+      );
     }
   };
 
+  /**
+   * Toggle pose detection on/off
+   */
+  const togglePoseDetection = () => {
+    const newState = !isPoseDetectionEnabled;
+    setIsPoseDetectionEnabled(newState);
+    if (newState) {
+      setPoseCount(0);
+    }
+  };
+
+  /**
+   * Handle device capability detection for optimal performance
+   */
   const handleDeviceCapability = ({
     nativeEvent: capability,
   }: {
     nativeEvent: DeviceCapability;
   }) => {
-    console.log('Device capability detected:', capability);
     setDeviceCapability(capability);
-    setTargetFPS(capability.recommendedFPS); // Set recommended FPS automatically
+    setTargetFPS(capability.recommendedFPS);
   };
 
+  /**
+   * Handle GPU status updates for performance monitoring
+   */
   const handleGPUStatus = ({
     nativeEvent: status,
   }: {
@@ -276,74 +296,66 @@ export default function CameraExample() {
       deviceTier: string;
     };
   }) => {
-    console.log('🚀 GPU Status detected:', status);
     setGpuStatus(status);
 
-    // Show an alert about the acceleration status
-    const accelerationType = status.isUsingGPU ? 'GPU/Neural Engine' : 'CPU';
-    const performanceLevel = status.isUsingGPU
-      ? 'Maximum Accuracy'
-      : 'Standard';
-    console.log(
-      `🎯 Pose detection running on ${accelerationType} for ${performanceLevel}`
-    );
+    // Enterprise logging - only essential GPU status
+    if (enableDetailedLogs) {
+      console.log(
+        `GPU Status: ${status.isUsingGPU ? 'GPU' : 'CPU'} processing on ${status.deviceTier} tier device`
+      );
+    }
   };
 
+  /**
+   * Adjust target FPS with validation
+   */
   const adjustFPS = (newFPS: number) => {
     const clampedFPS = Math.max(5, Math.min(60, newFPS));
     setTargetFPS(clampedFPS);
   };
 
-  const toggleFPSControls = () => {
-    setShowFPSControls(!showFPSControls);
-  };
-
-  const togglePerformanceControls = () => {
-    setShowPerformanceControls(!showPerformanceControls);
-  };
-
+  /**
+   * Handle pose service logs (enterprise-controlled)
+   */
   const handlePoseServiceLog = ({
     nativeEvent: { message, level, timestamp },
   }: {
     nativeEvent: { message: string; level: string; timestamp: number };
   }) => {
-    console.log(`[${level.toUpperCase()}] ${message}`);
-    setPoseServiceLogs((prev) => [
-      ...prev.slice(-49), // Keep last 49 logs to allow for 50 total
-      `[${new Date(timestamp * 1000).toLocaleTimeString()}] ${message}`,
-    ]);
+    if (enableDetailedLogs) {
+      setPoseServiceLogs((prev) => [
+        ...prev.slice(-49),
+        `[${new Date(timestamp * 1000).toLocaleTimeString()}] ${message}`,
+      ]);
+    }
   };
 
+  /**
+   * Handle pose service errors with enterprise error tracking
+   */
   const handlePoseServiceError = ({
     nativeEvent: { error, processingTime },
   }: {
     nativeEvent: { error: string; processingTime: number };
   }) => {
-    console.error(`Pose Service Error: ${error} (${processingTime}ms)`);
     setLastPoseServiceError(`${error} (${processingTime}ms)`);
-
-    // Clear error after 5 seconds
     setTimeout(() => setLastPoseServiceError(null), 5000);
   };
 
-  // Modal handlers with useCallback to prevent crashes
-  const closeDebugModal = useCallback(() => {
-    try {
-      setShowDebugLogs(false);
-    } catch (error) {
-      console.error('Error closing debug modal:', error);
-    }
+  // Modal handlers optimized for performance
+  const closeDebugModal = useCallback(() => setShowDebugLogs(false), []);
+  const clearDebugLogs = useCallback(() => {
+    setPoseServiceLogs([]);
+    setLastPoseServiceError(null);
+    setShowDebugLogs(false);
   }, []);
 
-  const clearDebugLogs = useCallback(() => {
-    try {
-      setPoseServiceLogs([]);
-      setLastPoseServiceError(null);
-      setShowDebugLogs(false);
-    } catch (error) {
-      console.error('Error clearing debug logs:', error);
-    }
-  }, []);
+  /**
+   * UI control toggles
+   */
+  const toggleFPSControls = () => setShowFPSControls(!showFPSControls);
+  const togglePerformanceControls = () =>
+    setShowPerformanceControls(!showPerformanceControls);
 
   return (
     <View style={styles.container}>
@@ -447,18 +459,30 @@ export default function CameraExample() {
                     { color: gpuStatus.isUsingGPU ? '#4CAF50' : '#FF9800' },
                   ]}
                 >
-                  {gpuStatus.isUsingGPU ? '🚀 GPU' : '🔄 CPU'}
+                  {gpuStatus.isUsingGPU ? 'GPU' : 'CPU'}
                 </Text>
               </View>
             )}
 
             {isPoseDetectionEnabled && (
               <>
-                <View style={styles.statItem}>
+                <View
+                  style={[
+                    styles.statItem,
+                    { opacity: enablePoseDataStreaming ? 1 : 0.3 },
+                  ]}
+                >
                   <Text style={styles.statLabel}>Poses</Text>
                   <Text style={styles.statValue}>{poseCount}</Text>
                 </View>
-                <View style={styles.statItem}>
+                <View
+                  style={[
+                    styles.statItem,
+                    {
+                      opacity: enablePoseDataStreaming ? 1 : 0.3,
+                    },
+                  ]}
+                >
                   <Text style={styles.statLabel}>Time</Text>
                   <Text style={styles.statValue}>{processingTime}ms</Text>
                 </View>
@@ -581,6 +605,17 @@ export default function CameraExample() {
                 💡 Disable streaming for maximum performance
                 {enablePoseDataStreaming &&
                   ` • Throttle: ${poseDataThrottleMs}ms`}
+              </Text>
+
+              {/* JavaScript Engine Information */}
+              <Text
+                style={[
+                  styles.deviceInfo,
+                  { marginTop: 8, color: 'rgba(255, 255, 255, 0.6)' },
+                ]}
+              >
+                JS Engine: {getJSEngine()} •{' '}
+                {Platform.OS === 'ios' ? 'iOS' : 'Android'} {Platform.Version}
               </Text>
             </View>
           )}
@@ -811,19 +846,21 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
     zIndex: 100,
   },
   controlButton: {
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 50,
-    width: 70,
-    height: 70,
+    width: 75,
+    height: 75,
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
+    marginHorizontal: 8,
   },
   controlButtonText: {
     fontSize: 24,
@@ -839,18 +876,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 50,
-    width: 80,
-    height: 80,
+    width: 75,
+    height: 75,
     justifyContent: 'center',
     borderWidth: 3,
     borderColor: 'rgba(255, 255, 255, 0.3)',
+    marginHorizontal: 8,
   },
   poseButtonActive: {
     backgroundColor: 'rgba(76, 175, 80, 0.8)',
     borderColor: '#4CAF50',
   },
   poseButtonText: {
-    fontSize: 28,
+    fontSize: 22,
     marginBottom: 2,
   },
   poseButtonLabel: {

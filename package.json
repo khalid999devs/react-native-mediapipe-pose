@@ -1,7 +1,7 @@
 {
   "name": "react-native-mediapipe-pose",
-  "version": "0.1.0",
-  "description": "My new module",
+  "version": "1.0.0",
+  "description": "Enterprise-level React Native MediaPipe Pose Detection with GPU acceleration and maximum accuracy",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "scripts": {
@@ -18,10 +18,21 @@
   "keywords": [
     "react-native",
     "expo",
-    "react-native-mediapipe-pose",
-    "ReactNativeMediapipePose"
+    "mediapipe",
+    "pose-detection",
+    "computer-vision",
+    "gpu-acceleration",
+    "enterprise",
+    "performance",
+    "machine-learning",
+    "computer-vision",
+    "pose-estimation",
+    "real-time"
   ],
-  "repository": "https://github.com/khalid999devs/react-native-mediapipe-pose",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/khalid999devs/react-native-mediapipe-pose.git"
+  },
   "bugs": {
     "url": "https://github.com/khalid999devs/react-native-mediapipe-pose/issues"
   },
@@ -39,5 +50,16 @@
     "expo": "*",
     "react": "*",
     "react-native": "*"
-  }
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "files": [
+    "build",
+    "ios",
+    "android",
+    "src",
+    "expo-module.config.json",
+    "README.md"
+  ]
 }

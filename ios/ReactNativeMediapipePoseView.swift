@@ -34,6 +34,11 @@ class ReactNativeMediapipePoseView: ExpoView {
   private var captureSession: AVCaptureSession?
   private var previewLayer: AVCaptureVideoPreviewLayer?
   private var poseOverlayLayer: CAShapeLayer?
+  
+  // Optimized pose rendering layers for maximum smoothness
+  private var activeConnectionLayer: CAShapeLayer?
+  private var activeLandmarkLayer: CAShapeLayer?
+  
   private var currentCameraType: AVCaptureDevice.Position = .front
   private var videoDevice: AVCaptureDevice?
   private var videoInput: AVCaptureDeviceInput?
@@ -93,6 +98,10 @@ class ReactNativeMediapipePoseView: ExpoView {
     super.layoutSubviews()
     previewLayer?.frame = bounds
     poseOverlayLayer?.frame = bounds
+    
+    // Update optimized layer frames
+    activeConnectionLayer?.frame = bounds
+    activeLandmarkLayer?.frame = bounds
   }
   
   private func detectDeviceCapability() {
@@ -209,18 +218,76 @@ class ReactNativeMediapipePoseView: ExpoView {
   
   private func setupPoseOverlayLayer() {
     poseOverlayLayer = CAShapeLayer()
-    poseOverlayLayer?.fillColor = UIColor.clear.cgColor  // Clear fill, only stroke for skeleton
-    poseOverlayLayer?.strokeColor = UIColor.cyan.cgColor
-    poseOverlayLayer?.lineWidth = 2.0  // Thinner lines like MediaPipe example
+    poseOverlayLayer?.fillColor = UIColor.clear.cgColor
     poseOverlayLayer?.frame = bounds
     poseOverlayLayer?.zPosition = 1000 // Ensure it's on top
+    
+    // Create optimized single-layer system for maximum performance
+    setupOptimizedPoseLayers()
     
     if let poseOverlayLayer = poseOverlayLayer {
       layer.addSublayer(poseOverlayLayer)
       if enableDetailedLogs {
-        print("🎨 ReactNativeMediapipePoseView: Pose overlay layer added with frame: \(bounds)")
+        print("🎨 ReactNativeMediapipePoseView: Optimized pose overlay layer added with frame: \(bounds)")
       }
     }
+  }
+  
+  private func setupOptimizedPoseLayers() {
+    // Create high-performance layers with optimized properties
+    activeConnectionLayer = createOptimizedConnectionLayer()
+    activeLandmarkLayer = createOptimizedLandmarkLayer()
+    
+    // Pre-configure layer properties once for better performance
+    activeConnectionLayer?.strokeColor = UIColor.systemGreen.cgColor
+    activeConnectionLayer?.opacity = 0.8
+    activeLandmarkLayer?.fillColor = UIColor.systemOrange.cgColor
+    activeLandmarkLayer?.opacity = 0.9
+    
+    // Add layers to the overlay
+    if let poseOverlay = poseOverlayLayer {
+      if let activeConnection = activeConnectionLayer {
+        poseOverlay.addSublayer(activeConnection)
+      }
+      if let activeLandmark = activeLandmarkLayer {
+        poseOverlay.addSublayer(activeLandmark)
+      }
+    }
+  }
+  
+  private func setupDoubleBufferedLayers() {
+    // Legacy method - now using optimized single-layer approach
+    setupOptimizedPoseLayers()
+  }
+  
+  private func createOptimizedConnectionLayer() -> CAShapeLayer {
+    let layer = CAShapeLayer()
+    layer.strokeColor = UIColor.systemGreen.cgColor
+    layer.fillColor = UIColor.clear.cgColor
+    layer.lineWidth = 2.0
+    layer.lineJoin = .round
+    layer.lineCap = .round
+    layer.opacity = 0.8
+    
+    // Performance optimizations for real-time updates
+    layer.shouldRasterize = false // Disable rasterization for dynamic content
+    layer.drawsAsynchronously = false // Synchronous drawing for immediate response
+    
+    return layer
+  }
+  
+  private func createOptimizedLandmarkLayer() -> CAShapeLayer {
+    let layer = CAShapeLayer()
+    layer.fillColor = UIColor.systemOrange.cgColor
+    layer.strokeColor = UIColor.white.cgColor
+    layer.lineWidth = 1.5
+    layer.opacity = 0.9
+    
+    // Performance optimizations for real-time updates
+    layer.shouldRasterize = false // Disable rasterization for dynamic content
+    layer.drawsAsynchronously = false // Synchronous drawing for immediate response
+    
+    return layer
   }
   
   private func setupVideoOutput() {
@@ -283,15 +350,34 @@ class ReactNativeMediapipePoseView: ExpoView {
       print("📹 ReactNativeMediapipePoseView: Pose detection \(enabled ? "enabled" : "disabled")")
     }
     
-    // Clear pose overlay when disabled
+    // Optimized pose overlay management for smoothness
     if !enabled {
-      DispatchQueue.main.async {
-        self.poseOverlayLayer?.path = nil
-        self.poseOverlayLayer?.sublayers?.forEach { $0.removeFromSuperlayer() }
-        self.poseOverlayLayer?.setNeedsDisplay()
-        if self.enableDetailedLogs {
-          print("🎨 Pose overlay cleared (detection disabled)")
+      DispatchQueue.main.async { [weak self] in
+        guard let self = self else { return }
+        
+        // Fast, smooth fade out for professional experience
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.2) // Quick fade out
+        CATransaction.setCompletionBlock {
+          // Clear paths after fade completes
+          self.activeConnectionLayer?.path = nil
+          self.activeLandmarkLayer?.path = nil
         }
+        
+        self.activeConnectionLayer?.opacity = 0.0
+        self.activeLandmarkLayer?.opacity = 0.0
+        
+        CATransaction.commit()
+        
+        if self.enableDetailedLogs {
+          print("🎨 Pose overlay optimized fade out (detection disabled)")
+        }
+      }
+    } else {
+      // Immediate restore for responsiveness
+      DispatchQueue.main.async { [weak self] in
+        self?.activeConnectionLayer?.opacity = 0.8
+        self?.activeLandmarkLayer?.opacity = 0.9
       }
     }
   }
@@ -315,35 +401,22 @@ class ReactNativeMediapipePoseView: ExpoView {
   
   func setEnablePoseDataStreaming(_ enabled: Bool) {
     enablePoseDataStreaming = enabled
-    if enableDetailedLogs {
-      print("Pose data streaming: \(enabled ? "enabled" : "disabled")")
-    }
   }
   
   func setPoseDataThrottleMs(_ throttleMs: Int) {
-    poseDataThrottleMs = max(16, throttleMs) // Minimum 16ms (60fps)
-    if enableDetailedLogs {
-      print("Pose data throttle set to: \(poseDataThrottleMs)ms")
-    }
+    poseDataThrottleMs = max(16, throttleMs)
   }
   
   func setEnableDetailedLogs(_ enabled: Bool) {
     enableDetailedLogs = enabled
-    print("Detailed logging: \(enabled ? "enabled" : "disabled")")
   }
   
   func setFPSChangeThreshold(_ threshold: Double) {
-    fpsChangeThreshold = max(0.5, threshold) // Minimum 0.5 FPS change threshold
-    if enableDetailedLogs {
-      print("FPS change threshold set to: \(fpsChangeThreshold)")
-    }
+    fpsChangeThreshold = max(0.5, threshold)
   }
   
   func setFPSReportThrottleMs(_ throttleMs: Double) {
-    fpsReportThrottleMs = max(100, throttleMs) // Minimum 100ms throttle
-    if enableDetailedLogs {
-      print("FPS report throttle set to: \(fpsReportThrottleMs)ms")
-    }
+    fpsReportThrottleMs = max(100, throttleMs)
   }
   
   func getGPUStatus() -> [String: Any] {
@@ -609,6 +682,9 @@ extension ReactNativeMediapipePoseView: AVCaptureVideoDataOutputSampleBufferDele
 // MARK: - PoseDetectionServiceDelegate
 extension ReactNativeMediapipePoseView: PoseDetectionServiceDelegate {
   func poseDetectionService(_ service: PoseDetectionService, didDetectPose result: PoseLandmarkerResult, processingTime: Double) {
+    // Guard against processing when detection is disabled to prevent flickering
+    guard isPoseDetectionEnabled else { return }
+    
     // Convert MediaPipe result to our format for drawing
     let landmarks = convertPoseLandmarkerResult(result)
     
@@ -694,8 +770,12 @@ extension ReactNativeMediapipePoseView: PoseDetectionServiceDelegate {
   }
   
   private func drawPoseLandmarks(_ landmarks: [NormalizedLandmark]) {
-    let path = UIBezierPath()
+    // Pre-calculate video rect once for better performance
     let videoRect = getVideoPreviewRect()
+    
+    // Create optimized paths for landmarks and connections
+    let landmarkPath = UIBezierPath()
+    let connectionPath = UIBezierPath()
     var visibleLandmarks = 0
     
     // Draw landmarks as small circles (like MediaPipe example)
@@ -713,49 +793,43 @@ extension ReactNativeMediapipePoseView: PoseDetectionServiceDelegate {
         
         // Draw small circles for landmarks
         let circle = UIBezierPath(arcCenter: transformedPoint, radius: 3, startAngle: 0, endAngle: .pi * 2, clockwise: true)
-        path.append(circle)
+        landmarkPath.append(circle)
+      }
+    }
+    
+    // Draw pose connections (skeleton) - single path creation for better performance
+    drawPoseConnections(landmarks, path: connectionPath, videoRect: videoRect)
+    
+    // Fast, synchronous update for maximum smoothness during movement
+    // Only async when absolutely necessary (thread safety)
+    if Thread.isMainThread {
+      // Direct update for maximum performance when already on main thread
+      updatePoseLayersDirectly(landmarkPath: landmarkPath, connectionPath: connectionPath)
+    } else {
+      // Quick async dispatch only when needed
+      DispatchQueue.main.async { [weak self] in
+        self?.updatePoseLayersDirectly(landmarkPath: landmarkPath, connectionPath: connectionPath)
       }
     }
     
     if enableDetailedLogs {
-      print("🎯 Drawing \(visibleLandmarks) visible landmarks")
+      print("🎯 Optimized drawing: \(visibleLandmarks) landmarks")
     }
+  }
+  
+  private func updatePoseLayersDirectly(landmarkPath: UIBezierPath, connectionPath: UIBezierPath) {
+    guard isPoseDetectionEnabled else { return }
     
-    // Draw pose connections (skeleton)
-    drawPoseConnections(landmarks, path: path, videoRect: videoRect)
+    // High-performance direct layer update with minimal overhead
+    CATransaction.begin()
+    CATransaction.setDisableActions(true) // Disable implicit animations for instant updates
+    CATransaction.setAnimationDuration(0) // Zero animation time for immediate response
     
-    DispatchQueue.main.async {
-      // Clear previous content
-      self.poseOverlayLayer?.path = nil
-      self.poseOverlayLayer?.sublayers?.forEach { $0.removeFromSuperlayer() }
-      
-      // Create connection layer (skeleton) with green thin lines
-      let connectionLayer = CAShapeLayer()
-      let connectionPath = UIBezierPath()
-      self.drawPoseConnections(landmarks, path: connectionPath, videoRect: videoRect)
-      
-      connectionLayer.path = connectionPath.cgPath
-      connectionLayer.strokeColor = UIColor.systemGreen.cgColor // Green skeleton
-      connectionLayer.fillColor = UIColor.clear.cgColor
-      connectionLayer.lineWidth = 0.5 // Much thinner lines
-      connectionLayer.lineJoin = .round
-      connectionLayer.lineCap = .round
-      connectionLayer.opacity = 0.8
-      
-      // Create landmark layer (dots) with orange circles
-      let landmarkLayer = CAShapeLayer()
-      landmarkLayer.path = path.cgPath
-      landmarkLayer.fillColor = UIColor.systemOrange.cgColor // Orange dots
-      landmarkLayer.strokeColor = UIColor.white.cgColor // White border
-      landmarkLayer.lineWidth = 1.5
-      landmarkLayer.opacity = 0.9
-      
-      // Add both layers
-      if let poseOverlay = self.poseOverlayLayer {
-        poseOverlay.addSublayer(connectionLayer)
-        poseOverlay.addSublayer(landmarkLayer)
-      }
-    }
+    // Direct path updates for real-time smoothness
+    activeConnectionLayer?.path = connectionPath.cgPath
+    activeLandmarkLayer?.path = landmarkPath.cgPath
+    
+    CATransaction.commit()
   }
   
   private func transformNormalizedPoint(x: Float, y: Float, videoRect: CGRect) -> CGPoint {

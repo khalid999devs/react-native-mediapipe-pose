@@ -8,7 +8,8 @@ jsconfig.json
 
 
 # React Native examples
-mediapipe_pose_example/
+mediapipe-pose-example/
+models/
 
 # Xcode
 #
